@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import emoji
 
 from nirite.schemas import Prospect
 
@@ -13,7 +14,7 @@ ALIASES = {
     "job_title": ["title", "job title", "position", "role"],
     "company_name": ["company", "company name", "organization", 
                      "org name", "organisation", "org", 
-                     "organization name", "organisation name"
+                     "organization name", "organisation name",
                      "company/organization", "company/organisation",
                      "workplace", "employer", "place of work"],
     "company_domain": ["domain", "company domain", "organization domain", 
@@ -83,16 +84,16 @@ def alias_mapping(df: pd.DataFrame) -> dict[str, str]:
 
 def get_record_fields(
         record: dict[str, str | None]
-        ) -> tuple[dict[str, str | None], 
-                   dict[str, str | None], 
-                   dict[str, str | None]]:
+        ) -> tuple[
+            dict[str, str | None], 
+            dict[str, str | None]]:
     
     canonical_fields = set(Prospect.model_fields) - {
         "source_file", "source_row", "extra_fields"
     }
 
     values = {
-        key: (value.strip() or None)
+        key: (value.strip() or None) if value else None
         for key, value in record.items()}
 
     known_fields = {
@@ -108,6 +109,44 @@ def get_record_fields(
     }
 
     return known_fields, extra_fields
+
+def clean_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    # Remove emojis
+    value = emoji.replace_emoji(value, replace="")
+    value = " ".join(value.split())
+
+    return value or None
+
+def normalise_name(
+    full_name: str | None,
+    first_name: str | None,
+    last_name: str | None
+) -> tuple[str | None, str | None, str | None]:
+    full_name = clean_name(full_name)
+    first_name = clean_name(first_name)
+    last_name = clean_name(last_name)
+
+    # Combine first and last name if full name empty
+    if not full_name and (first_name or last_name):
+        full_name = " ".join(
+            part for part in (first_name, last_name) if part
+        )
+
+    # If either first or last name is empty, try to split full name
+    if full_name and (not first_name or not last_name):
+        parts = full_name.split()
+
+        if len(parts) == 1:
+            first_name = first_name or parts[0]
+            last_name = last_name or parts[0]
+        elif len(parts) >= 2:
+            first_name = first_name or " ".join(parts[:-1])
+            last_name = last_name or parts[-1]
+
+    return full_name, first_name, last_name
 
 def normalise_file(path: Path) -> list[Prospect]:
     df = init_df(path)
@@ -125,6 +164,19 @@ def normalise_file(path: Path) -> list[Prospect]:
         df.to_dict(orient="records"), start=2
     ):
         known_fields, extra_fields = get_record_fields(row)
+
+        full_name, first_name, last_name = normalise_name(
+            full_name=known_fields.get("full_name"),
+            first_name=known_fields.get("first_name"),
+            last_name=known_fields.get("last_name"),
+        )
+
+        known_fields.update({
+            "full_name": full_name,
+            "first_name": first_name,
+            "last_name": last_name,
+        })
+
         prospects.append(
             Prospect(
                 **known_fields,
