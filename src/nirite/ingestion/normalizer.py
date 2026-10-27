@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
-from rich.table import header
+
 from nirite.schemas import Prospect
 
 # Set of common field aliases
