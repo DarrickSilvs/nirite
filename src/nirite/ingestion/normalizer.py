@@ -20,7 +20,8 @@ ALIASES = {
     "company_domain": ["domain", "company domain", "organization domain", 
                        "org domain", "organisation domain"],
     "company_website": ["website", "company website", "organization website",
-                        "org website", "organisation website"],
+                        "org website", "organisation website", "company url", 
+                        "organization url", "org url", "organisation url"],
     "profile_url": ["profile", "profile url", "linkedin profile",
                     "linkedin url", "linkedin link", "social profile", "linkedin"],
     "email": ["email", "email address", "e-mail", 
@@ -34,8 +35,15 @@ Cleans up header values containing _, -, and whitespace
 Replaces it with a single space and converts to lowercase
 '''
 def cleanup_header(value: str) -> str:
-    value = value.strip().lower()
-    return re.sub(r'[_\-\s]+', ' ', value)
+    value = value.strip()
+
+    # Convert camelCase/PascalCase to spaces
+    value = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
+
+    value = re.sub(r'[_\-\s]+', ' ', value)
+    value = re.sub(r'\s+', ' ', value)
+
+    return value.lower()
 
 def init_df(path: Path) -> pd.DataFrame:
     if not path.is_file():
