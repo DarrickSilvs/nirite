@@ -7,6 +7,13 @@ from rich.console import Console
 from rich.table import Table
 
 from nirite.ingestion.normalizer import normalise_file
+from nirite.schemas import Prospect
+from nirite.reassignment import (
+    delete_extra_field,
+    get_all_fields,
+    get_extra_fields,
+    reassign_field,
+)
 
 app = typer.Typer()
 console = Console()
@@ -64,6 +71,137 @@ def ingest(
     table.add_row("Output", str(output_path))
 
     console.print(table)
+
+@app.command()
+def map(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        readable=True,
+        resolve_path=True
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Path to save the updated JSON."
+    ),
+):
+    try:
+        records = json.loads(input_path.read_text(encoding="utf-8"))
+        prospects = [
+            Prospect.model_validate(record)
+            for record in records
+        ]
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        console.print(f"[red]Error loading input:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    while True:
+        available_fields = get_all_fields(prospects)
+        extra_fields = get_extra_fields(prospects)
+
+        console.print("\n[bold]Available fields[/bold]")
+        for index, (_, _, label) in enumerate(
+            available_fields, start=1
+        ):
+            console.print(f"{index}. {label}")
+
+        console.print("\n[bold]Actions[/bold]")
+        console.print("1. Reassign or swap fields")
+        console.print("2. Delete an extra field")
+        console.print("0. Finish")
+
+        action = typer.prompt("Choose an action", type=int)
+
+        if action == 0:
+            break
+
+        if action == 1:
+            source_index = typer.prompt(
+                "Select source field number", type=int
+            )
+
+            if not 1 <= source_index <= len(available_fields):
+                console.print("[red]Invalid field number.[/red]")
+                continue
+
+            target_index = typer.prompt(
+                "Select destination field number", type=int
+            )
+            if not 1 <= target_index <= len(available_fields):
+                console.print("[red]Invalid field number.[/red]")
+                continue
+
+            source_kind, source_key, source_label = (
+                available_fields[source_index - 1]
+            )
+            target_kind, target_key, target_label = (
+                available_fields[target_index - 1]
+            )
+
+            try:
+                reassign_field(
+                    prospects,
+                    source_kind,
+                    source_key,
+                    target_kind,
+                    target_key
+                )
+                console.print(
+                    f"Reassigned '{source_label}' and '{target_label}'."
+                )
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {e}")
+
+        elif action == 2:
+            if not extra_fields:
+                console.print("No extra fields available.")
+                continue
+
+            console.print("\n[bold]Extra fields[/bold]")
+            for index, field in enumerate(extra_fields, start=1):
+                console.print(f"{index}. {field}")
+
+            field_index = typer.prompt(
+                "Select extra field number", type=int
+            )
+
+            if not 1 <= field_index <= len(extra_fields):
+                console.print("[red]Invalid field number.[/red]")
+                continue
+
+            field_name = extra_fields[field_index - 1]
+
+            if typer.confirm(
+                f"Delete '{field_name}' from all records?"
+            ):
+                delete_extra_field(prospects, field_name)
+                console.print(f"Deleted '{field_name}'.")
+
+        else:
+            console.print("[red]Invalid action number.[/red]")
+
+    destination = output_path or input_path
+
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(
+                [
+                    prospect.model_dump(mode="json")
+                    for prospect in prospects
+                ],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        console.print(f"[red]Error saving output:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"Saved updated records to {destination}")
 
 if __name__ == "__main__":
     app()

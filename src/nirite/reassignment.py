@@ -46,14 +46,13 @@ def get_key(kind: str, key: str, prospect: Prospect) -> str:
     else:
         return prospect.extra_fields.get(key)
 
-def reassign_extra_field(
+def reassign_field(
     prospects: list[Prospect],
     source_kind: str,
     source_key: str,
     target_kind: str,
     target_key: str
 ) -> None:
-    canonical_fields = list(get_canonical_fields())
     check_valid_kind(source_kind)
     check_valid_kind(target_kind)
 
