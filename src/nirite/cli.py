@@ -1,5 +1,6 @@
 import json
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -10,6 +11,15 @@ from nirite.ingestion.normalizer import normalise_file
 app = typer.Typer()
 console = Console()
 
+def get_filename(path_string):
+    path = PurePath(path_string)
+    
+    # If it didn't split backslashes (e.g., a Windows path parsed on Linux)
+    if '\\' in path.name and not '/' in path_string:
+        path = PureWindowsPath(path_string)
+        
+    return path.name
+
 @app.command()
 def ingest(
     input_path: Path = typer.Argument(
@@ -18,12 +28,21 @@ def ingest(
         readable=True,
         resolve_path=True,
     ),
-    output_path: Path = typer.Option(
-        Path("data/processed/prospects.json"),
+    output_path: Optional[Path] = typer.Option(
+        None,
         "--output",
         "-o",
+        help="Path to save the processed JSON file."
     ),
+    mapping_path: Optional[Path] = typer.Option(
+        None,
+        "--mapping",
+        "-m",
+    )
 ):
+    if output_path is None:
+        output_path = Path(f"data/processed/{get_filename(input_path.stem)}.json")
+    
     prospects = normalise_file(input_path)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

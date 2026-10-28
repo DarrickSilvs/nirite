@@ -8,26 +8,46 @@ from nirite.schemas import Prospect
 
 # Set of common field aliases
 ALIASES = {
-    "full_name": ["name", "full name", "fullname", "contact name"],
-    "first_name": ["first name", "firstname", "given name"],
-    "last_name": ["last name", "lastname", "surname", "family name"],
-    "job_title": ["title", "job title", "position", "role"],
-    "company_name": ["company", "company name", "organization", 
-                     "org name", "organisation", "org", 
-                     "organization name", "organisation name",
-                     "company/organization", "company/organisation",
-                     "workplace", "employer", "place of work"],
-    "company_domain": ["domain", "company domain", "organization domain", 
-                       "org domain", "organisation domain"],
-    "company_website": ["website", "company website", "organization website",
-                        "org website", "organisation website", "company url", 
-                        "organization url", "org url", "organisation url"],
-    "profile_url": ["profile", "profile url", "linkedin profile",
-                    "linkedin url", "linkedin link", "social profile", "linkedin"],
-    "email": ["email", "email address", "e-mail", 
-              "e-mail address", "work email",
-              "work email address", "personal email", 
-              "personal email address", "contact email",],
+    "full_name": [
+        "name", "full name", "fullname", "contact name",
+    ],
+    "first_name": [
+        "first name", "firstname", "given name",
+    ],
+    "last_name": [
+        "last name", "lastname", "surname", "family name",
+    ],
+    "job_title": [
+        "title", "job title", "position", "role",
+    ],
+    "company_name": [
+        "company", "company name", "organization",
+        "org name", "organisation", "org",
+        "organization name", "organisation name",
+        "company/organization", "company/organisation",
+        "workplace", "employer", "place of work",
+    ],
+    "company_domain": [
+        "domain", "company domain", "organization domain",
+        "org domain", "organisation domain",
+    ],
+    "company_website": [
+        "company website", "organization website",
+        "org website", "organisation website",
+        "company url", "organization url", "org url",
+        "organisation url",
+    ],
+    "profile_url": [
+        "profile", "profile url", "linkedin profile",
+        "linkedin url", "linkedin link", "social profile",
+        "linkedin",
+    ],
+    "email": [
+        "email", "email address", "e-mail",
+        "e-mail address", "work email",
+        "work email address", "personal email",
+        "personal email address", "contact email",
+    ],
 }
 
 '''
@@ -60,13 +80,15 @@ def init_df(path: Path) -> pd.DataFrame:
     return df
 
 def get_cleaned_columns(df: pd.DataFrame) -> list[str]:
-    original_columns = list(df.columns)
-    cleaned_columns = [cleanup_header(col) for col in original_columns]
+    cleaned = [cleanup_header(str(col)) for col in df.columns]
 
-    if len(set(cleaned_columns)) != len(cleaned_columns):
-        raise ValueError("Duplicate column names after normalisation")
+    if len(set(cleaned)) != len(cleaned):
+        raise ValueError(
+            "Duplicate column names after header normalization. "
+            "Rename the conflicting columns in the source file."
+        )
 
-    return cleaned_columns
+    return cleaned
 
 def alias_mapping(df: pd.DataFrame) -> dict[str, str]:
     aliases = {
