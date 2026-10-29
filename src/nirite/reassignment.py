@@ -1,11 +1,13 @@
 from nirite.schemas import Prospect
 
-def get_canonical_fields() -> set[str]:
-    return set(Prospect.model_fields) - {
-        "source_file",
-        "source_row",
-        "extra_fields",
-    }
+def get_canonical_fields() -> list[str]:
+    excluded = {"source_file", "source_row", "extra_fields"}
+
+    return [
+        name
+        for name in Prospect.model_fields
+        if name not in excluded
+    ]
 
 def get_extra_fields(prospects: list[Prospect]) -> list[str]:
     return list(dict.fromkeys(
@@ -20,7 +22,7 @@ def get_all_fields(
 ) -> list[tuple[str, str, str]]:
     fields = [
         ("canonical", name, name)
-        for name in list(get_canonical_fields())
+        for name in get_canonical_fields()
     ]
 
     fields.extend(

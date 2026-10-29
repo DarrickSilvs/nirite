@@ -38,9 +38,10 @@ ALIASES = {
         "organisation url",
     ],
     "profile_url": [
-        "profile", "profile url", "linkedin profile",
-        "linkedin url", "linkedin link", "social profile",
-        "linkedin",
+        "profile", "profile url", "linkedin profile", 
+        "linked in profile", "linkedin url", "linked in url", 
+        "linkedin link", "linked in link", "social profile", 
+        "linkedin", "linked in",
     ],
     "email": [
         "email", "email address", "e-mail",

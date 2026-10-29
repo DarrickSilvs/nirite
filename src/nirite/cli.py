@@ -41,11 +41,6 @@ def ingest(
         "-o",
         help="Path to save the processed JSON file."
     ),
-    mapping_path: Optional[Path] = typer.Option(
-        None,
-        "--mapping",
-        "-m",
-    )
 ):
     if output_path is None:
         output_path = Path(f"data/processed/{get_filename(input_path.stem)}.json")
@@ -129,15 +124,28 @@ def map(
             target_index = typer.prompt(
                 "Select destination field number", type=int
             )
-            if not 1 <= target_index <= len(available_fields):
+            
+            if target_index < 1:
                 console.print("[red]Invalid field number.[/red]")
                 continue
+            elif target_index > len(available_fields):
+                if typer.confirm(
+                    "Create a new extra field and move it there?"
+                ):
+                    target_label = typer.prompt(
+                        "Name the new field", type=str
+                    )
+
+                    target_kind = "extra"
+                    target_label = target_label.lower().strip()
+                    target_key = target_label
+            else:
+                target_kind, target_key, target_label = (
+                    available_fields[target_index - 1]
+                )
 
             source_kind, source_key, source_label = (
                 available_fields[source_index - 1]
-            )
-            target_kind, target_key, target_label = (
-                available_fields[target_index - 1]
             )
 
             try:

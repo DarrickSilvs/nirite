@@ -1,5 +1,6 @@
 import pandas as pd
 
+from nirite.ingestion.normalizer import cleanup_header, ALIASES
 from nirite.ingestion.normalizer import (
     cleanup_header,
     normalise_file,
@@ -112,7 +113,7 @@ def test_alias_mapping():
         "last name": "last_name",
         "position": "job_title",
         "organisation": "company_name",
-        "linkedin url": "profile_url",
+        "linked in url": "profile_url",
         "email address": "email",
     }
 
