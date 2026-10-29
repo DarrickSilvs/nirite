@@ -1,6 +1,5 @@
 import pandas as pd
 
-from nirite.ingestion.normalizer import cleanup_header, ALIASES
 from nirite.ingestion.normalizer import (
     cleanup_header,
     normalise_file,
