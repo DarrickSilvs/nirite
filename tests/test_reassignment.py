@@ -1,5 +1,5 @@
-from nirite.schemas import Prospect
-from nirite.reassignment import (
+from nirite.models.schemas import Prospect
+from nirite.ingestion.reassignment import (
     delete_extra_field,
     get_all_fields,
     get_canonical_fields,

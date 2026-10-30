@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import emoji
 
-from nirite.schemas import Prospect
+from nirite.models.schemas import Prospect
 
 # Set of common field aliases
 ALIASES = {

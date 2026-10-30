@@ -7,8 +7,8 @@ from rich.console import Console
 from rich.table import Table
 
 from nirite.ingestion.normalizer import normalise_file
-from nirite.schemas import Prospect
-from nirite.reassignment import (
+from nirite.models.schemas import Prospect
+from nirite.ingestion.reassignment import (
     delete_extra_field,
     get_all_fields,
     get_extra_fields,

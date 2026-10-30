@@ -1,4 +1,4 @@
-from nirite.schemas import Prospect
+from nirite.models.schemas import Prospect
 
 def get_canonical_fields() -> list[str]:
     excluded = {"source_file", "source_row", "extra_fields"}
