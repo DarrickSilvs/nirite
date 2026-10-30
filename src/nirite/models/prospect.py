@@ -11,6 +11,9 @@ class Prospect(BaseModel):
     company_website: str | None = None
     profile_url: str | None = None
     email: str | None = None
+    country: str | None = None
+    state: str | None = None
+    city: str | None = None
 
     extra_fields : dict[str, str | None] = Field(default_factory=dict)
 

@@ -27,6 +27,9 @@ def test_canonical_fields_follow_schema_order():
         "company_website",
         "profile_url",
         "email",
+        "country",
+        "state",
+        "city"
     ]
 
 def test_move_canonical_value_to_empty_extra_field():

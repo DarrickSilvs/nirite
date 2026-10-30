@@ -49,6 +49,15 @@ ALIASES = {
         "work email address", "personal email",
         "personal email address", "contact email",
     ],
+    "country": [
+        "country name", "nation", "based in country",
+    ],
+    "state": [
+        "state/province", "province", "region", "state name",
+    ],
+    "city": [
+        "town", "town name", "city name", "based in city"
+    ]
 }
 
 '''
