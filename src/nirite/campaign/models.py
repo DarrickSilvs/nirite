@@ -84,12 +84,12 @@ class Criterion(CampaignModel):
     id: str
     description: str
 
-    kind : CriterionKind
-    evaluation_mode = EvaluationMode
+    kind: CriterionKind
+    evaluation_mode: EvaluationMode
 
-    predicate = FieldPredicate | None = None
+    predicate: FieldPredicate | None = None
 
-    weight = float | None = Field(
+    weight: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
