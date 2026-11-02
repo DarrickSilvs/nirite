@@ -1,87 +1,99 @@
 import json
+from pathlib import Path
 
-from openai import OpenAI
 from pydantic import ValidationError
 
-from nirite.campaign.models import CampaignDefinition
+from nirite.campaign.llm.providers import LLMProvider
+from nirite.models.campaign import CampaignDefinition
+from nirite.models.campaign_analysis import CampaignAnalysis
 
-MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 
-SYSTEM_PROMPT = """
-You turn a user's campaign description into a structured campaign
-definition for a lead qualification system.
+PROMPT_PATH = Path(__file__).parent / "llm" / "prompts" / "campaign_parser.md"
+SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 
-Return one JSON object matching the supplied JSON schema.
-Do not include markdown fences or commentary.
 
-Guidelines:
-- Preserve the user's intent. Do not invent requirements.
-- Use structured criteria only when a condition can be checked against
-  a prospect field using a supported predicate.
-- Use semantic criteria for meaning that requires interpretation.
-- Use hybrid criteria when both a field check and semantic interpretation
-  are useful.
-- Requirements are must-haves. Exclusions disqualify. Preferences affect
-  ranking but are not hard requirements.
-- If essential information is missing or ambiguous, set status to
-  "needs_clarification" and include concise clarification questions.
-- Generate 3 to 7 distinct search queries covering different useful facets.
-  Avoid near-duplicate wording.
-- Query plans should improve both discovery coverage and ranking signals.
-- Do not claim that appearing in a search result proves qualification.
-"""
+def parse_json(content: str) -> dict:
+    if not content:
+        raise ValueError("No content returned from model.")
 
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Model returned invalid JSON: {e}") from e
 class CampaignParser:
-    def __init__(
-        self,
-        client: OpenAI,
-        model: str = MODEL,
-    ) -> None:
-        self.client = client
-        self.model = model
+   def __init__(self, provider: LLMProvider) -> None:
+      self.provider = provider
 
-    def parse(self, prompt: str) -> CampaignDefinition:
-        prompt = prompt.strip()
-        if not prompt:
-           raise ValueError("Campaign description cannot be empty.")
+   def parse(
+         self, 
+         prompt: str, 
+         analyses: list[CampaignAnalysis]
+   ) -> CampaignDefinition:
+      
+      prompt = prompt.strip()
+      if not prompt:
+         raise ValueError("Campaign description cannot be empty.")
 
-        schema = CampaignDefinition.model_json_schema()
+      schema = CampaignDefinition.model_json_schema()
 
-        response = self.client.chat.completions.create(
-           model=self.model,
-           messages=[
-              {
-                 "role": "system",
-                 "content": (
-                    f"{SYSTEM_PROMPT}\n\n"
-                    "JSON schema:\n"
-                    f"{json.dumps(schema, ensure_ascii=False)}"
-                 )
-              },
-              {
-                 "role": "user",
-                 "content": prompt
-              },
-           ],
-           # low temperature (0.0-0.3): factual, deterministic, and structured output
-           # medium temperature (0.4-0.7): creative, balanced, and exploratory (general-purpose)
-           # high temperature (0.8-1.0): imaginative, diverse, and risky (open-ended)
-           temperature=0.2,
-           max_tokens=8192,
-           extra_body={"chat_template_kwargs":{"enable_thinking":True}},
-        )
+      user_message = f"""
+         Original campaign description:
 
-        content = response.choices[0].message.content
-        if not content:
-           raise ValueError("No content returned from model.")
+         {prompt}
 
-        # Validate the model's JSON against our Pydantic models.
-        try:
-           campaign = CampaignDefinition.model_validate_json(content)
-        except ValidationError as e:
-           raise ValueError(
-              f"Model output does not conform to expected schema: {e}"
-           ) from e
+         Independent campaign analyses:
 
-        campaign.original_prompt = prompt
-        return campaign
+         {json.dumps(
+            [analysis.model_dump(mode="json") for analysis in analyses],
+            indent=2,
+         )}
+
+         Generate the final CampaignDefinition using the original description
+         and the independent analyses.
+         """
+
+      content = self.provider.generate_json(
+         system_prompt=SYSTEM_PROMPT,
+         user_prompt=user_message,
+         schema=schema,
+      )
+
+      if not content:
+         raise ValueError("No content returned from model.")
+      
+      try:
+         data = parse_json(content)
+      except ValueError as first_error:
+         if "No content returned" in str(first_error):
+            raise
+
+         retry_user_message = (
+            f"{user_message}\n\n"
+            f"Your previous response was not valid JSON:\n{content}\n\n"
+            "Return the same campaign definition as one complete JSON object "
+            "matching the supplied schema. Do not change its interpretation "
+            "or add commentary."
+         )
+
+         content = self.provider.generate_json(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=retry_user_message,
+            schema=schema,
+         )
+         try:
+            data = parse_json(content)
+         except ValueError as second_error:
+            raise ValueError(
+               "Model returned invalid JSON after one retry. "
+               f"error={second_error}"
+            ) from second_error
+
+      try:
+         campaign = CampaignDefinition.model_validate(data)
+      except ValidationError as e:
+         raise ValueError(
+            f"Model output does not conform to expected schema: {e}"
+         ) from e
+
+      campaign.original_prompt = prompt
+      return campaign

@@ -1,13 +1,21 @@
+from copy import error
 import json
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import Optional
+from openai import OpenAIError
 
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from nirite.campaign.llm.providers import build_analysis_providers, build_parser_provider
 from nirite.ingestion.normalizer import normalise_file
 from nirite.models.prospect import Prospect
+
+from nirite.campaign.analyser import CampaignAnalyser
+from nirite.campaign.parser import CampaignParser
+
 from nirite.ingestion.reassignment import (
     delete_extra_field,
     get_all_fields,
@@ -210,6 +218,142 @@ def map(
         raise typer.Exit(code=1) from exc
 
     console.print(f"Saved updated records to {destination}")
+
+@app.command()
+def campaign(
+    prompt: str = typer.Argument(
+        ...,
+        help="Natural language campaign description"
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Path to save the campaign definition JSON file."
+    ),
+):
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            # Pass 1: Campaign Analysis
+            task = progress.add_task(
+                description="Analysing campaign with lightweight models...",
+                total=None
+            )
+
+            analyser = CampaignAnalyser(
+                providers=build_analysis_providers()
+            )
+
+            try:
+                analyses = analyser.analyse(prompt)
+
+                progress.update(
+                    task,
+                    description="[green]Campaign analysis complete!"
+                )
+
+                # Pass 2: Campaign Parsing
+                progress.update(
+                    task,
+                    description="[bold cyan]Generating campaign definition...",
+                )
+
+                parser = CampaignParser(
+                    provider=build_parser_provider()
+                )
+
+                result = parser.parse(prompt, analyses)
+                progress.update(
+                    task, 
+                    description="[green]Campaign parsing complete!"
+                )
+            except RuntimeError as e:
+                console.print(f"[red]{e}[/red]")
+                raise typer.Exit(code=1)
+    except (RuntimeError, ValueError, OpenAIError) as e:
+        console.print(f"[red]Campaign processing failed:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+     # Campaign summary
+    console.print("\n[bold cyan]Campaign Summary[/bold cyan]")
+    console.print(f"Status: {result.status.value}")
+    console.print(f"Target: {result.spec.target_type.value}")
+    console.print(f"Objective: {result.spec.objective}")
+    console.print(f"Description: {result.spec.target_description}")
+
+    # Criteria
+    criteria_table = Table(title="Campaign Criteria")
+    criteria_table.add_column("ID")
+    criteria_table.add_column("Kind")
+    criteria_table.add_column("Mode")
+    criteria_table.add_column("Description")
+    criteria_table.add_column("Predicate")
+
+    for criterion in result.spec.criteria:
+        predicate = (
+            criterion.predicate.model_dump_json()
+            if criterion.predicate
+            else "-"
+        )
+
+        criteria_table.add_row(
+            criterion.id,
+            criterion.kind.value,
+            criterion.evaluation_mode.value,
+            criterion.description,
+            predicate,
+        )
+
+    console.print(criteria_table)
+
+    # Search queries
+    query_table = Table(title="Generated Search Queries")
+    query_table.add_column("ID")
+    query_table.add_column("Facet")
+    query_table.add_column("Query")
+    query_table.add_column("Rationale")
+
+    for query in result.query_plan.queries:
+        query_table.add_row(
+            query.id,
+            query.facet.value,
+            query.query,
+            query.rationale,
+        )
+
+    console.print(query_table)
+
+    # Clarifications
+    if result.clarifications:
+        console.print("\n[bold yellow]Clarification Questions[/bold yellow]")
+
+        for index, clarification in enumerate(
+            result.clarifications, start=1
+        ):
+            console.print(
+                f"{index}. {clarification.question}"
+            )
+            console.print(
+                f"   Reason: {clarification.reason}"
+            )
+
+    # Optional JSON persistence
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        output_path.write_text(
+            result.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+
+        console.print(
+            f"\n[green]Saved campaign to {output_path}[/green]"
+        )
 
 if __name__ == "__main__":
     app()

@@ -1,18 +1,39 @@
 import json
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from nirite.campaign.parser import CampaignParser
+from nirite.models.campaign import CriterionKind
+from nirite.models.campaign_analysis import CampaignAnalysis, AnalysisCriterion
+
 
 @pytest.fixture
-def mock_client():
+def mock_provider():
     return MagicMock()
 
 @pytest.fixture
-def parser(mock_client):
-    return CampaignParser(client=mock_client)
+def parser(mock_provider):
+    return CampaignParser(provider=mock_provider)
+
+@pytest.fixture
+def valid_analyses():
+    return [
+        CampaignAnalysis(
+            target_type="company",
+            objective="Find suitable SaaS companies",
+            target_description="Australian SaaS companies",
+            explicit_criteria=[
+                AnalysisCriterion(
+                    id="saas",
+                    description="Company provides SaaS products",
+                    kind=CriterionKind.REQUIREMENT,
+                    source_phrase="SaaS companies",
+                )
+            ],
+            ambiguities=[],
+        )
+    ]
 
 @pytest.fixture
 def valid_response():
@@ -31,7 +52,7 @@ def valid_response():
                     "kind": "requirement",
                     "evaluation_mode": "structured",
                     "predicate": {
-                        "field": "location",
+                        "field": "country",
                         "operator": "contains",
                         "value": "Australia",
                     },
@@ -63,23 +84,17 @@ def valid_response():
         "status": "ready",
     }
 
-def mock_completion(content):
-    return SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(content=content)
-            )
-        ]
-    )
-
-def test_parse_valid_campaign(parser, mock_client, valid_response):
+def test_parse_valid_campaign(
+    parser,
+    mock_provider,
+    valid_response,
+    valid_analyses,
+):
     prompt = "Find Australian SaaS companies selling to mid-market businesses."
 
-    mock_client.chat.completions.create.return_value = mock_completion(
-        json.dumps(valid_response)
-    )
+    mock_provider.generate_json.return_value = json.dumps(valid_response)
 
-    result = parser.parse(prompt)
+    result = parser.parse(prompt, valid_analyses)
 
     assert result.original_prompt == prompt
     assert result.spec.target_type == "company"
@@ -87,27 +102,29 @@ def test_parse_valid_campaign(parser, mock_client, valid_response):
     assert len(result.query_plan.queries) == 2
     assert result.status == "ready"
 
-    mock_client.chat.completions.create.assert_called_once()
+    mock_provider.generate_json.assert_called_once()
 
-def test_parse_rejects_empty_prompt(parser):
+def test_parse_rejects_empty_prompt(parser, valid_analyses):
     with pytest.raises(ValueError, match="cannot be empty"):
-        parser.parse("   ")
+        parser.parse("   ", valid_analyses)
 
-def test_parse_rejects_empty_response(parser, mock_client):
-    mock_client.chat.completions.create.return_value = mock_completion(None)
+def test_parse_rejects_empty_response(parser, mock_provider, valid_analyses):
+    mock_provider.generate_json.return_value = ""
 
     with pytest.raises(ValueError, match="No content returned from model"):
-        parser.parse("Find Australian SaaS companies")
+        parser.parse("Find Australian SaaS companies", valid_analyses)
 
-def test_parse_rejects_invalid_json(parser, mock_client):
-    mock_client.chat.completions.create.return_value = mock_completion(
-        "This is not JSON"
-    )
+def test_parse_rejects_invalid_json(parser, mock_provider, valid_analyses):
+    mock_provider.generate_json.return_value = "This is not JSON"
 
-    with pytest.raises(ValueError, match="does not conform to expected schema"):
-        parser.parse("Find Australian SaaS companies")
+    with pytest.raises(ValueError, match="invalid JSON"):
+        parser.parse("Find Australian SaaS companies", valid_analyses)
 
-def test_parse_rejects_invalid_campaign_schema(parser, mock_client):
+def test_parse_rejects_invalid_campaign_schema(
+    parser,
+    mock_provider,
+    valid_analyses,
+):
     invalid_response = {
         "original_prompt": "Test",
         "spec": {},
@@ -115,24 +132,38 @@ def test_parse_rejects_invalid_campaign_schema(parser, mock_client):
         "status": "ready",
     }
 
-    mock_client.chat.completions.create.return_value = mock_completion(
-        json.dumps(invalid_response)
-    )
+    mock_provider.generate_json.return_value = json.dumps(invalid_response)
 
     with pytest.raises(ValueError, match="does not conform to expected schema"):
-        parser.parse("Find Australian SaaS companies")
+        parser.parse("Find Australian SaaS companies", valid_analyses)
 
 def test_parse_overwrites_model_original_prompt(
     parser,
-    mock_client,
+    mock_provider,
     valid_response,
+    valid_analyses,
 ):
     prompt = "Find fintech companies in Singapore."
 
-    mock_client.chat.completions.create.return_value = mock_completion(
-        json.dumps(valid_response)
-    )
+    mock_provider.generate_json.return_value = json.dumps(valid_response)
 
-    result = parser.parse(prompt)
+    result = parser.parse(prompt, valid_analyses)
 
     assert result.original_prompt == prompt
+
+def test_parse_passes_analyses_to_provider(
+    parser,
+    mock_provider,
+    valid_response,
+    valid_analyses,
+):
+    prompt = "Find Australian SaaS companies."
+
+    mock_provider.generate_json.return_value = json.dumps(valid_response)
+
+    parser.parse(prompt, valid_analyses)
+
+    user_prompt = mock_provider.generate_json.call_args.kwargs["user_prompt"]
+
+    assert prompt in user_prompt
+    assert "suitable SaaS companies" in user_prompt

@@ -58,8 +58,22 @@ class CampaignStatus(StrEnum):
 
 PredicateValue = str | int | float | bool | list[str]
 
+class PredicateField(StrEnum):
+    FULL_NAME = "full_name"
+    FIRST_NAME = "first_name"
+    LAST_NAME = "last_name"
+    JOB_TITLE = "job_title"
+    COMPANY_NAME = "company_name"
+    COMPANY_DOMAIN = "company_domain"
+    COMPANY_WEBSITE = "company_website"
+    PROFILE_URL = "profile_url"
+    EMAIL = "email"
+    COUNTRY = "country"
+    STATE = "state"
+    CITY = "city"
+    
 class FieldPredicate(CampaignModel):
-    field: str
+    field: PredicateField
     operator: PredicateOperator
     value : PredicateValue | None = None
     upper_value: PredicateValue | None = None
@@ -84,7 +98,12 @@ class Criterion(CampaignModel):
     id: str
     description: str
 
-    kind: CriterionKind
+    kind: CriterionKind = Field(
+        description=(
+            "Whether this criterion is a hard requirement, "
+            "disqualifying exclusion, or ranking preference."
+        )
+    )
     evaluation_mode: EvaluationMode
 
     predicate: FieldPredicate | None = None
@@ -93,6 +112,11 @@ class Criterion(CampaignModel):
         default=None,
         ge=0.0,
         le=1.0,
+        description=(
+            "Optional ranking weight between 0 and 1. "
+            "Only applicable to preference criteria. "
+            "Must be null or omitted for requirements and exclusions."
+        ),
     )
 
     evidence_hints: list[str] = Field (

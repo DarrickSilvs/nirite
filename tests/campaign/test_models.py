@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from nirite.campaign.models import (
+from nirite.models.campaign import (
     CampaignDefinition,
     CampaignSpec,
     CampaignStatus,
@@ -9,6 +9,7 @@ from nirite.campaign.models import (
     CriterionKind,
     EvaluationMode,
     FieldPredicate,
+    PredicateField,
     PredicateOperator,
     QueryPlan,
     SearchFacet,
@@ -18,20 +19,18 @@ from nirite.campaign.models import (
 
 def test_valid_structured_criterion():
     criterion = Criterion(
-        id="employee_count",
-        description="Company has 10 to 100 employees.",
+        id="city",
+        description="Company is located in Sydney.",
         kind=CriterionKind.REQUIREMENT,
         evaluation_mode=EvaluationMode.STRUCTURED,
         predicate=FieldPredicate(
-            field="employee_count",
-            operator=PredicateOperator.BETWEEN,
-            value=10,
-            upper_value=100,
+            field="city",
+            operator=PredicateOperator.EQ,
+            value="Sydney",
         ),
     )
 
-    assert criterion.predicate.field == "employee_count"
-    assert criterion.predicate.value == 10
+    assert criterion.predicate.field == PredicateField.CITY
 
 def test_structured_criterion_requires_predicate():
     with pytest.raises(ValidationError):
