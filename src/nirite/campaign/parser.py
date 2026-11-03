@@ -20,6 +20,7 @@ def parse_json(content: str) -> dict:
         return json.loads(content)
     except json.JSONDecodeError as e:
         raise ValueError(f"Model returned invalid JSON: {e}") from e
+
 class CampaignParser:
    def __init__(self, provider: LLMProvider) -> None:
       self.provider = provider
@@ -90,10 +91,32 @@ class CampaignParser:
 
       try:
          campaign = CampaignDefinition.model_validate(data)
-      except ValidationError as e:
-         raise ValueError(
-            f"Model output does not conform to expected schema: {e}"
-         ) from e
+      except ValidationError as first_error:
+         retry_user_message = (
+            f"{user_message}\n\n"
+            "Your previous response was valid JSON but did not match "
+            "the required CampaignDefinition schema.\n"
+            "Correct its structure using the supplied schema. Preserve "
+            "the campaign's interpretation and values. Return one complete "
+            "JSON object only.\n\n"
+            f"Validation error:\n{first_error}\n\n"
+            f"Previous response:\n{content}"
+         )
+
+         content = self.provider.generate_json(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=retry_user_message,
+            schema=schema,
+         )
+
+         try:
+            data = parse_json(content)
+            campaign = CampaignDefinition.model_validate(data)
+         except (ValueError, ValidationError) as second_error:
+            raise ValueError(
+               "Model output did not conform to the schema after one retry. "
+               f"{second_error}"
+            ) from second_error
 
       campaign.original_prompt = prompt
       return campaign
