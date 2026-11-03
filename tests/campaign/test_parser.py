@@ -134,7 +134,7 @@ def test_parse_rejects_invalid_campaign_schema(
 
     mock_provider.generate_json.return_value = json.dumps(invalid_response)
 
-    with pytest.raises(ValueError, match="does not conform to expected schema"):
+    with pytest.raises(ValueError, match="did not conform to the schema after one retry"):
         parser.parse("Find Australian SaaS companies", valid_analyses)
 
 def test_parse_overwrites_model_original_prompt(

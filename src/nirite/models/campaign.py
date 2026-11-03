@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import Annotated
 
 from pydantic import (
     BaseModel,
@@ -208,7 +207,7 @@ class CampaignDefinition(CampaignModel):
     spec: CampaignSpec
     query_plan: QueryPlan
 
-    status: CampaignStatus
+    status: CampaignStatus = CampaignStatus.READY
 
     clarifications: list[Clarification] = Field(
         default_factory=list
@@ -217,16 +216,20 @@ class CampaignDefinition(CampaignModel):
     schema_version: int = 1
     version: int = 1
 
-    @model_validator(mode="after")
-    def validate_status(self):
-        if (
-            self.status == CampaignStatus.NEEDS_CLARIFICATION
-            and not self.clarifications
-        ):
-            raise ValueError(
-                "A campaign needing clarification "
-                "must contain at least one question."
-            )
+    @model_validator(mode="before")
+    @classmethod
+    def determine_status(cls, data):
+        if not isinstance(data, dict):
+            return data
 
-        return self
+        data = data.copy()
+        clarifications = data.get("clarifications") or []
+
+        data["status"] = (
+            CampaignStatus.NEEDS_CLARIFICATION
+            if clarifications
+            else CampaignStatus.READY
+        )
+
+        return data
     

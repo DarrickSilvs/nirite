@@ -17,6 +17,46 @@ from nirite.models.campaign import (
     TargetType,
 )
 
+@pytest.fixture
+def valid_campaign_data():
+    return {
+        "original_prompt": "Find mid-sized logistics technology companies.",
+        "spec": {
+            "target_type": "company",
+            "objective": "Find potential customers for AI automation.",
+            "target_description": (
+                "Mid-sized logistics technology companies that could "
+                "benefit from AI automation."
+            ),
+            "criteria": [
+                {
+                    "id": "crit_1",
+                    "description": "Company operates in logistics technology.",
+                    "kind": "requirement",
+                    "evaluation_mode": "semantic",
+                    "predicate": None,
+                    "weight": None,
+                    "evidence_hints": [
+                        "Company develops logistics or supply-chain software."
+                    ],
+                }
+            ],
+        },
+        "query_plan": {
+            "queries": [
+                {
+                    "id": "q1",
+                    "query": "logistics technology companies",
+                    "facet": "industry",
+                    "rationale": "Find companies in the target industry.",
+                }
+            ]
+        },
+        "clarifications": [],
+        "schema_version": 1,
+        "version": 1,
+    }
+
 def test_valid_structured_criterion():
     criterion = Criterion(
         id="city",
@@ -69,7 +109,6 @@ def test_only_preferences_can_have_weights():
             ),
             weight=0.8,
         )
-
 
 def test_between_requires_upper_value():
     with pytest.raises(ValidationError):
@@ -135,32 +174,46 @@ def test_query_plan_rejects_more_than_seven_queries():
     with pytest.raises(ValidationError):
         QueryPlan(queries=queries)
 
-def test_campaign_needing_clarification_requires_question():
-    with pytest.raises(ValidationError):
-        CampaignDefinition(
-            original_prompt="Find marketing agencies.",
-            spec=CampaignSpec(
-                target_type=TargetType.COMPANY,
-                objective="Find agencies.",
-                target_description="Marketing agencies.",
-                criteria=[
-                    Criterion(
-                        id="b2b",
-                        description="Serves B2B customers.",
-                        kind=CriterionKind.REQUIREMENT,
-                        evaluation_mode=EvaluationMode.SEMANTIC,
-                    )
-                ],
-            ),
-            query_plan=QueryPlan(
-                queries=[
-                    SearchQuery(
-                        id="q1",
-                        query="B2B marketing agencies",
-                        facet=SearchFacet.INDUSTRY,
-                        rationale="Direct match.",
-                    )
-                ]
-            ),
-            status=CampaignStatus.NEEDS_CLARIFICATION,
-        )
+def test_campaign_without_clarifications_is_ready(valid_campaign_data):
+    valid_campaign_data["status"] = CampaignStatus.NEEDS_CLARIFICATION
+    valid_campaign_data["clarifications"] = []
+
+    campaign = CampaignDefinition.model_validate(valid_campaign_data)
+
+    assert campaign.status == CampaignStatus.READY
+
+def test_status_needs_clarification_when_questions_exist(valid_campaign_data):
+    valid_campaign_data["clarifications"] = [
+        {
+            "question": "What employee range defines mid-sized?",
+            "reason": "Company size is ambiguous.",
+            "related_criterion_ids": ["crit_1"],
+        }
+    ]
+
+    campaign = CampaignDefinition.model_validate(valid_campaign_data)
+
+    assert campaign.status == CampaignStatus.NEEDS_CLARIFICATION
+
+
+def test_status_ready_without_clarifications(valid_campaign_data):
+    valid_campaign_data["clarifications"] = []
+
+    campaign = CampaignDefinition.model_validate(valid_campaign_data)
+
+    assert campaign.status == CampaignStatus.READY
+
+
+def test_status_overrides_llm_provided_status(valid_campaign_data):
+    valid_campaign_data["status"] = CampaignStatus.READY
+    valid_campaign_data["clarifications"] = [
+        {
+            "question": "What employee range defines mid-sized?",
+            "reason": "Company size is ambiguous.",
+            "related_criterion_ids": ["crit_1"],
+        }
+    ]
+
+    campaign = CampaignDefinition.model_validate(valid_campaign_data)
+
+    assert campaign.status == CampaignStatus.NEEDS_CLARIFICATION
