@@ -144,9 +144,15 @@ def map(
                         "Name the new field", type=str
                     )
 
+                    if not target_label or not target_label.strip():
+                        console.print("[red]New field must not be empty![/red]")
+                        continue
+
                     target_kind = "extra"
                     target_label = target_label.lower().strip()
                     target_key = target_label
+                else:
+                    continue
             else:
                 target_kind, target_key, target_label = (
                     available_fields[target_index - 1]
