@@ -32,7 +32,9 @@ def get_filename(path_string):
     # If it didn't split backslashes (e.g., a Windows path parsed on Linux)
     if '\\' in path.name and not '/' in path_string:
         path = PureWindowsPath(path_string)
-        
+
+    return path
+
 def save_prospects(prospects: list[Prospect], destination: Path) -> None:
     """Write prospects atomically so a crash cannot leave a half-written file."""
     try:

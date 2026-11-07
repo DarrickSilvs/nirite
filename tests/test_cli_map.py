@@ -1,9 +1,10 @@
 import json
+from pathlib import PureWindowsPath
 
 import pytest
 from typer.testing import CliRunner
 
-from nirite.cli import app
+from nirite.cli import app, get_filename
 
 RECORD = {
     "full_name": "A B",
@@ -56,3 +57,45 @@ def test_edits_are_saved_even_if_session_aborts(prospects_file):
     CliRunner().invoke(app, ["map", str(prospects_file)], input="1\n5\n4\n")
     out = load(prospects_file)
     assert out["job_title"] == "Acme" and out["company_name"] == "CEO"
+
+
+def test_get_filename_returns_plain_stem():
+    result = get_filename("customers")
+    assert result is not None
+    assert str(result) == "customers"
+
+
+def test_get_filename_posix_path_input():
+    result = get_filename("data/raw/customers.csv")
+    assert result is not None
+    assert str(result).endswith("customers.csv")
+
+
+def test_get_filename_windows_backslash_on_linux():
+    result = get_filename(r"data\raw\customers")
+    assert result is not None
+    assert isinstance(result, PureWindowsPath)
+    assert "\\" in str(result)
+
+
+def test_get_filename_never_returns_none():
+    for stem in ["customers", "data/raw/customers.csv", "file", "a.b.c"]:
+        assert get_filename(stem) is not None
+
+
+def test_ingest_default_output_path_is_stem_json(tmp_path):
+    input_file = tmp_path / "customers.csv"
+    input_file.write_text("full_name,company_name\nA B,Acme\n", encoding="utf-8")
+
+    destination = tmp_path / "out" / "customers.json"
+    result = CliRunner().invoke(
+        app, ["ingest", str(input_file), "--output", str(destination)]
+    )
+    assert result.exit_code == 0
+    assert destination.exists()
+    data = json.loads(destination.read_text(encoding="utf-8"))
+    assert len(data) == 1
+    assert data[0]["full_name"] == "A B"
+
+    # No None.json artifact is produced anywhere under the temp tree.
+    assert not list(tmp_path.rglob("None.json"))
