@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from nirite.models.campaign import (
     CampaignModel,
@@ -25,3 +25,24 @@ class CampaignAnalysis(CampaignModel):
     target_description: str
     explicit_criteria: list[AnalysisCriterion] = Field(min_length=1)
     ambiguities: list[CampaignAmbiguity] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_references(self):
+        criterion_ids = [c.id for c in self.explicit_criteria]
+        if len(criterion_ids) != len(set(criterion_ids)):
+            raise ValueError("Criterion IDs must be unique.")
+
+        ambiguity_ids = [a.id for a in self.ambiguities]
+        if len(ambiguity_ids) != len(set(ambiguity_ids)):
+            raise ValueError("Ambiguity IDs must be unique.")
+
+        known = set(criterion_ids)
+        for ambiguity in self.ambiguities:
+            unknown = set(ambiguity.affected_criterion_ids) - known
+            if unknown:
+                raise ValueError(
+                    f"Ambiguity {ambiguity.id} references unknown "
+                    f"criteria: {sorted(unknown)}"
+                )
+
+        return self

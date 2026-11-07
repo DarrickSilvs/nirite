@@ -33,7 +33,24 @@ def get_filename(path_string):
     if '\\' in path.name and not '/' in path_string:
         path = PureWindowsPath(path_string)
         
-    return path.name
+def save_prospects(prospects: list[Prospect], destination: Path) -> None:
+    """Write prospects atomically so a crash cannot leave a half-written file."""
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        tmp = destination.with_name(destination.name + ".tmp")
+        tmp.write_text(
+            json.dumps(
+                [p.model_dump(mode="json") for p in prospects],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        tmp.replace(destination)
+    except OSError as exc:
+        console.print(f"[red]Error saving output:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
 
 @app.command()
 def ingest(
@@ -100,6 +117,8 @@ def map(
         console.print(f"[red]Error loading input:[/red] {e}")
         raise typer.Exit(code=1) from e
 
+    destination = output_path or input_path
+
     while True:
         available_fields = get_all_fields(prospects)
         extra_fields = get_extra_fields(prospects)
@@ -137,22 +156,21 @@ def map(
                 console.print("[red]Invalid field number.[/red]")
                 continue
             elif target_index > len(available_fields):
-                if typer.confirm(
+                if not typer.confirm(
                     "Create a new extra field and move it there?"
                 ):
-                    target_label = typer.prompt(
-                        "Name the new field", type=str
-                    )
-
-                    if not target_label or not target_label.strip():
-                        console.print("[red]New field must not be empty![/red]")
-                        continue
-
-                    target_kind = "extra"
-                    target_label = target_label.lower().strip()
-                    target_key = target_label
-                else:
                     continue
+
+                target_label = typer.prompt(
+                    "Name the new field", type=str
+                ).lower().strip()
+
+                if not target_label:
+                    console.print("[red]Field name cannot be empty.[/red]")
+                    continue
+
+                target_kind = "extra"
+                target_key = target_label
             else:
                 target_kind, target_key, target_label = (
                     available_fields[target_index - 1]
@@ -173,6 +191,7 @@ def map(
                 console.print(
                     f"Reassigned '{source_label}' and '{target_label}'."
                 )
+                save_prospects(prospects, destination)
             except ValueError as e:
                 console.print(f"[red]Error:[/red] {e}")
 
@@ -199,30 +218,13 @@ def map(
                 f"Delete '{field_name}' from all records?"
             ):
                 delete_extra_field(prospects, field_name)
+                save_prospects(prospects, destination)
                 console.print(f"Deleted '{field_name}'.")
 
         else:
             console.print("[red]Invalid action number.[/red]")
 
-    destination = output_path or input_path
-
-    try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(
-            json.dumps(
-                [
-                    prospect.model_dump(mode="json")
-                    for prospect in prospects
-                ],
-                indent=2,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        console.print(f"[red]Error saving output:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
-
+    save_prospects(prospects, destination)
     console.print(f"Saved updated records to {destination}")
 
 @app.command()

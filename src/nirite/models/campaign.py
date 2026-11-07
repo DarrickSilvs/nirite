@@ -232,4 +232,17 @@ class CampaignDefinition(CampaignModel):
         )
 
         return data
-    
+
+    @model_validator(mode="after")
+    def validate_clarification_references(self):
+        known = {criterion.id for criterion in self.spec.criteria}
+
+        for clarification in self.clarifications:
+            unknown = set(clarification.related_criterion_ids) - known
+            if unknown:
+                raise ValueError(
+                    "Clarification references unknown criterion IDs: "
+                    f"{sorted(unknown)}"
+                )
+
+        return self

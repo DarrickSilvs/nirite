@@ -73,7 +73,7 @@ def test_valid_structured_criterion():
     assert criterion.predicate.field == PredicateField.CITY
 
 def test_structured_criterion_requires_predicate():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="require a predicate"):
         Criterion(
             id="employee_count",
             description="Company has 10 to 100 employees.",
@@ -82,44 +82,48 @@ def test_structured_criterion_requires_predicate():
         )
 
 def test_semantic_criterion_does_not_accept_predicate():
-    with pytest.raises(ValidationError):
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    with pytest.raises(ValidationError, match="cannot have a predicate"):
         Criterion(
             id="b2b_saas",
             description="Serves B2B SaaS customers.",
             kind=CriterionKind.REQUIREMENT,
             evaluation_mode=EvaluationMode.SEMANTIC,
-            predicate=FieldPredicate(
-                field="industry",
-                operator=PredicateOperator.EQ,
-                value="SaaS",
-            ),
+            predicate=predicate,
         )
 
 def test_only_preferences_can_have_weights():
-    with pytest.raises(ValidationError):
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    with pytest.raises(ValidationError, match="Only preferences"):
         Criterion(
-            id="employee_count",
-            description="Has at least 10 employees.",
+            id="country",
+            description="Located in Australia.",
             kind=CriterionKind.REQUIREMENT,
             evaluation_mode=EvaluationMode.STRUCTURED,
-            predicate=FieldPredicate(
-                field="employee_count",
-                operator=PredicateOperator.GTE,
-                value=10,
-            ),
+            predicate=predicate,
             weight=0.8,
         )
 
 def test_between_requires_upper_value():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="BETWEEN requires upper_value"):
         FieldPredicate(
-            field="employee_count",
+            field=PredicateField.JOB_TITLE,
             operator=PredicateOperator.BETWEEN,
-            value=10,
+            value="a",
         )
 
 def test_exists_does_not_accept_values():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="EXISTS must not contain"):
         FieldPredicate(
             field="company_website",
             operator=PredicateOperator.EXISTS,
@@ -134,7 +138,7 @@ def test_campaign_spec_rejects_duplicate_criterion_ids():
         evaluation_mode=EvaluationMode.SEMANTIC,
     )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="unique"):
         CampaignSpec(
             target_type=TargetType.COMPANY,
             objective="Find suitable agencies.",
@@ -157,7 +161,7 @@ def test_query_plan_rejects_duplicate_queries():
         rationale="Alternative search angle.",
     )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="Duplicate search queries"):
         QueryPlan(queries=[query, duplicate])
 
 def test_query_plan_rejects_more_than_seven_queries():
@@ -217,3 +221,9 @@ def test_status_overrides_llm_provided_status(valid_campaign_data):
     campaign = CampaignDefinition.model_validate(valid_campaign_data)
 
     assert campaign.status == CampaignStatus.NEEDS_CLARIFICATION
+
+
+def test_predicate_fields_exist_on_prospect():
+    from nirite.models.prospect import Prospect
+
+    assert {f.value for f in PredicateField} <= set(Prospect.model_fields)

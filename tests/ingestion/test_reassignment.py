@@ -1,3 +1,5 @@
+import pytest
+
 from nirite.models.prospect import Prospect
 from nirite.ingestion.reassignment import (
     delete_extra_field,
@@ -65,27 +67,50 @@ def test_swap_two_populated_canonical_fields():
     assert prospect.job_title == "Acme"
 
 
-def test_empty_source_does_not_change_destination():
-    prospect = make_prospect(
-        company_name=None,
-        extra_fields={"Company": "Acme"},
-    )
+def test_swap_is_applied_to_every_row_including_one_sided_rows():
+    rows = [
+        make_prospect(company_name="Engineer", job_title="Acme"),
+        make_prospect(company_name="Engineer"),
+        make_prospect(job_title="Acme"),
+    ]
 
-    reassign_field(
-        [prospect],
-        "canonical",
-        "company_name",
-        "extra",
-        "Company",
-    )
+    reassign_field(rows, "canonical", "company_name", "canonical", "job_title")
 
-    assert prospect.company_name is None
-    assert prospect.extra_fields["Company"] == "Acme"
+    assert [(r.company_name, r.job_title) for r in rows] == [
+        ("Acme", "Engineer"),
+        (None, "Engineer"),
+        ("Acme", None),
+    ]
+
+
+def test_move_into_completely_empty_destination_clears_source():
+    rows = [make_prospect(company_name="Acme"), make_prospect()]
+
+    reassign_field(rows, "canonical", "company_name", "extra", "Company")
+
+    assert rows[0].company_name is None
+    assert rows[0].extra_fields == {"Company": "Acme"}
+    assert rows[1].extra_fields == {}
+
+
+def test_swap_with_extra_field_does_not_leave_empty_keys():
+    rows = [
+        make_prospect(extra_fields={"Company": "Acme"}),
+        make_prospect(company_name="Beta"),
+    ]
+
+    reassign_field(rows, "canonical", "company_name", "extra", "Company")
+
+    assert rows[0].company_name == "Acme"
+    assert rows[0].extra_fields == {}
+    assert rows[1].company_name is None
+    assert rows[1].extra_fields == {"Company": "Beta"}
+
 
 def test_identical_fields_are_rejected():
     prospect = make_prospect(company_name="Acme")
 
-    try:
+    with pytest.raises(ValueError, match="different"):
         reassign_field(
             [prospect],
             "canonical",
@@ -93,10 +118,6 @@ def test_identical_fields_are_rejected():
             "canonical",
             "company_name",
         )
-    except ValueError as exc:
-        assert "different" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError")
 
 def test_delete_extra_field_from_all_records():
     prospects = [

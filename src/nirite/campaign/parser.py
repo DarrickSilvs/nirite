@@ -21,6 +21,46 @@ def parse_json(content: str) -> dict:
     except json.JSONDecodeError as e:
         raise ValueError(f"Model returned invalid JSON: {e}") from e
 
+
+def assign_stable_ids(data: dict) -> dict:
+    """Replace model-chosen IDs with c1..cn / q1..qn and remap references.
+
+    Runs before validation so ID style never varies between runs. Malformed
+    shapes are left untouched for schema validation to report.
+    """
+    spec = data.get("spec")
+    plan = data.get("query_plan")
+    mapping: dict[str, str] = {}
+
+    if isinstance(spec, dict) and isinstance(spec.get("criteria"), list):
+        for index, criterion in enumerate(spec["criteria"], start=1):
+            if not isinstance(criterion, dict):
+                continue
+            new_id = f"c{index}"
+            mapping.setdefault(str(criterion.get("id")), new_id)
+            criterion["id"] = new_id
+
+    if isinstance(plan, dict) and isinstance(plan.get("queries"), list):
+        for index, query in enumerate(plan["queries"], start=1):
+            if isinstance(query, dict):
+                query["id"] = f"q{index}"
+
+    clarifications = data.get("clarifications")
+    if isinstance(clarifications, list):
+        for clarification in clarifications:
+            refs = (
+                clarification.get("related_criterion_ids")
+                if isinstance(clarification, dict)
+                else None
+            )
+            if isinstance(refs, list):
+                # unknown references are kept so validation rejects them
+                clarification["related_criterion_ids"] = [
+                    mapping.get(str(ref), ref) for ref in refs
+                ]
+
+    return data
+
 class CampaignParser:
    def __init__(self, provider: LLMProvider) -> None:
       self.provider = provider
@@ -90,7 +130,7 @@ class CampaignParser:
             ) from second_error
 
       try:
-         campaign = CampaignDefinition.model_validate(data)
+         campaign = CampaignDefinition.model_validate(assign_stable_ids(data))
       except ValidationError as first_error:
          retry_user_message = (
             f"{user_message}\n\n"
@@ -111,7 +151,7 @@ class CampaignParser:
 
          try:
             data = parse_json(content)
-            campaign = CampaignDefinition.model_validate(data)
+            campaign = CampaignDefinition.model_validate(assign_stable_ids(data))
          except (ValueError, ValidationError) as second_error:
             raise ValueError(
                "Model output did not conform to the schema after one retry. "

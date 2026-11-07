@@ -97,7 +97,7 @@ class CampaignAnalyser:
         if not self.providers:
             raise ValueError("No analysis providers configured.")
 
-        results: list[CampaignAnalysis] = []
+        results: list[tuple[str, CampaignAnalysis]] = []
         failures: list[str] = []
 
         with ThreadPoolExecutor(
@@ -116,7 +116,7 @@ class CampaignAnalyser:
             for future in as_completed(futures):
                 provider_name = futures[future]
                 try:
-                    results.append(future.result())
+                    results.append((provider_name, future.result()))
                 except Exception as e:
                     failures.append(f"{provider_name}: {e}")
 
@@ -132,4 +132,6 @@ class CampaignAnalyser:
                 )
             )
 
-        return results
+        # as_completed yields by latency; sort so the parser input is stable
+        results.sort(key=lambda item: item[0])
+        return [analysis for _, analysis in results]

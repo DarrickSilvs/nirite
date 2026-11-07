@@ -1,4 +1,5 @@
 import re
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -101,24 +102,40 @@ def get_cleaned_columns(df: pd.DataFrame) -> list[str]:
     return cleaned
 
 def alias_mapping(df: pd.DataFrame) -> dict[str, str]:
-    aliases = {
-        cleanup_header(alias): field
-        for field, names in ALIASES.items()
-        for alias in names
-    }
+    """Map cleaned column names to canonical fields.
 
-    mapped = {
-        column: aliases[column]
-        for column in df.columns
-        if column in aliases
-    }
+    Priority per field: a column already named after the canonical field wins,
+    then aliases in the order listed in ALIASES. When several columns compete
+    for one field, the winner is mapped and the others are left unmapped, so
+    they are preserved in extra_fields. A warning names every demoted column.
+    """
+    candidates: dict[str, list[tuple[int, str]]] = {}
 
-    targets = list(mapped.values())
-    if len(set(targets)) != len(targets):
-        raise ValueError(
-            "Multiple columns mapped to the same field."
-            "Please ensure unique column names."
-        )
+    for field, names in ALIASES.items():
+        ranked = {cleanup_header(field): -1}
+        for rank, alias in enumerate(names):
+            ranked.setdefault(cleanup_header(alias), rank)
+
+        for column in df.columns:
+            if column in ranked:
+                candidates.setdefault(field, []).append(
+                    (ranked[column], column)
+                )
+
+    mapped: dict[str, str] = {}
+    for field, found in candidates.items():
+        found.sort()
+        winner = found[0][1]
+        mapped[winner] = field
+
+        if len(found) > 1:
+            demoted = ", ".join(repr(column) for _, column in found[1:])
+            warnings.warn(
+                f"Several columns match '{field}'. Using {winner!r}; "
+                f"kept {demoted} as extra fields.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     return mapped
 

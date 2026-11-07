@@ -167,3 +167,51 @@ def test_parse_passes_analyses_to_provider(
 
     assert prompt in user_prompt
     assert "suitable SaaS companies" in user_prompt
+
+
+def test_parser_assigns_stable_ids_and_remaps_clarifications(
+    parser, mock_provider, valid_response, valid_analyses
+):
+    valid_response["spec"]["criteria"][0]["id"] = "country_rule"
+    valid_response["spec"]["criteria"][1]["id"] = "CRIT-B"
+    valid_response["query_plan"]["queries"][0]["id"] = "alpha"
+    valid_response["query_plan"]["queries"][1]["id"] = "beta"
+    valid_response["clarifications"] = [{
+        "question": "What is mid-market?",
+        "reason": "Size undefined",
+        "related_criterion_ids": ["CRIT-B"],
+    }]
+    mock_provider.generate_json.return_value = json.dumps(valid_response)
+
+    result = parser.parse("Find Australian SaaS companies.", valid_analyses)
+
+    assert [c.id for c in result.spec.criteria] == ["c1", "c2"]
+    assert [q.id for q in result.query_plan.queries] == ["q1", "q2"]
+    assert result.clarifications[0].related_criterion_ids == ["c2"]
+    assert result.status == "needs_clarification"
+
+
+def test_parser_rejects_clarification_with_dangling_reference(
+    parser, mock_provider, valid_response, valid_analyses
+):
+    valid_response["clarifications"] = [{
+        "question": "?", "reason": "r", "related_criterion_ids": ["ghost"],
+    }]
+    mock_provider.generate_json.return_value = json.dumps(valid_response)
+
+    with pytest.raises(ValueError, match="unknown criterion IDs"):
+        parser.parse("Find Australian SaaS companies.", valid_analyses)
+
+    assert mock_provider.generate_json.call_count == 2  # one repair retry
+
+
+def test_parser_repair_retry_can_succeed(
+    parser, mock_provider, valid_response, valid_analyses
+):
+    mock_provider.generate_json.side_effect = [
+        "not json at all",
+        json.dumps(valid_response),
+    ]
+    result = parser.parse("Find Australian SaaS companies.", valid_analyses)
+    assert result.status == "ready"
+    assert mock_provider.generate_json.call_count == 2

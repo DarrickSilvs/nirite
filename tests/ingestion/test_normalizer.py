@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from nirite.ingestion.normalizer import (
     cleanup_header,
@@ -119,27 +120,35 @@ def test_alias_mapping():
     # Unknown columns remain unmapped.
     assert "contacted on" not in mapped
 
-def test_rejects_duplicate_targets():
-    df = pd.DataFrame(columns=[
-        "Name",
-        "First Name",
-        "Last Name",
-        "Position",
-        "Organisation",
-        "LinkedIn URL",
-        "Email_Address",
-        "Contacted On",
-        "Job Title",  # Duplicate target for Position
-        "Company Name"
-    ])
-
+def test_alias_collision_keeps_one_winner_and_warns():
+    df = pd.DataFrame(columns=["Position", "Job Title", "Organisation", "Company Name"])
     df.columns = get_cleaned_columns(df)
 
-    try:
-        alias_mapping(df)
-    except ValueError as e:
-        assert str(e) == (
-            "Multiple columns mapped to the same field."
-            "Please ensure unique column names."
-        )
+    with pytest.warns(UserWarning, match="Several columns match"):
+        mapped = alias_mapping(df)
+
+    # "job title" outranks "position"; "company name" outranks "organisation"
+    assert mapped == {"job title": "job_title", "company name": "company_name"}
+
+
+def test_canonical_named_column_wins_over_alias_and_nothing_is_dropped(tmp_path):
+    source = tmp_path / "c.csv"
+    source.write_text("Name,Country,Country Name\nA,AU,Australia\n")
+
+    with pytest.warns(UserWarning):
+        prospect = normalise_file(source)[0]
+
+    assert prospect.country == "AU"
+    assert prospect.extra_fields["country name"] == "Australia"
+
+
+def test_email_and_work_email_both_survive(tmp_path):
+    source = tmp_path / "e.csv"
+    source.write_text("Name,Email,Work Email\nA,me@x.com,me@work.com\n")
+
+    with pytest.warns(UserWarning):
+        prospect = normalise_file(source)[0]
+
+    assert prospect.email == "me@x.com"
+    assert prospect.extra_fields["work email"] == "me@work.com"
 
