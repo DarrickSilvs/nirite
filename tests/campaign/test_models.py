@@ -114,6 +114,99 @@ def test_only_preferences_can_have_weights():
             weight=0.8,
         )
 
+
+def test_weight_below_zero_rejected():
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    with pytest.raises(ValidationError, match="weight"):
+        Criterion(
+            id="country_weight",
+            description="Located in Australia.",
+            kind=CriterionKind.PREFERENCE,
+            evaluation_mode=EvaluationMode.STRUCTURED,
+            predicate=predicate,
+            weight=-0.5,
+        )
+
+
+def test_weight_above_one_rejected():
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    with pytest.raises(ValidationError, match="weight"):
+        Criterion(
+            id="country_weight",
+            description="Located in Australia.",
+            kind=CriterionKind.PREFERENCE,
+            evaluation_mode=EvaluationMode.STRUCTURED,
+            predicate=predicate,
+            weight=1.5,
+        )
+
+
+def test_weight_on_exclusion_rejected():
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    with pytest.raises(ValidationError, match="Only preferences"):
+        Criterion(
+            id="country_exclusion",
+            description="Not located in Australia.",
+            kind=CriterionKind.EXCLUSION,
+            evaluation_mode=EvaluationMode.STRUCTURED,
+            predicate=predicate,
+            weight=0.5,
+        )
+
+
+@pytest.mark.parametrize("weight", [0.0, 0.5, 1.0])
+def test_valid_weight_on_preference_accepted(weight):
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    criterion = Criterion(
+        id="country_pref",
+        description="Located in Australia.",
+        kind=CriterionKind.PREFERENCE,
+        evaluation_mode=EvaluationMode.STRUCTURED,
+        predicate=predicate,
+        weight=weight,
+    )
+
+    assert criterion.weight == weight
+
+
+def test_no_weight_on_preference_accepted():
+    predicate = FieldPredicate(
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+
+    criterion = Criterion(
+        id="country_pref",
+        description="Located in Australia.",
+        kind=CriterionKind.PREFERENCE,
+        evaluation_mode=EvaluationMode.STRUCTURED,
+        predicate=predicate,
+        weight=None,
+    )
+
+    assert criterion.weight is None
+
 def test_between_requires_upper_value():
     with pytest.raises(ValidationError, match="BETWEEN requires upper_value"):
         FieldPredicate(
