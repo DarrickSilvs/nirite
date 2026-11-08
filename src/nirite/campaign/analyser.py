@@ -1,7 +1,6 @@
 import json
-import time 
+import time
 from typing import Any
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -22,7 +21,6 @@ PROMPT_PATH = (
 SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 
 MAX_ATTEMPTS = 3
-MIN_SUCCESSFUL_ANALYSES = 2
 RETRY_DELAY_SECONDS = 1
 
 def is_server_503(error: Exception) -> bool:
@@ -97,41 +95,26 @@ class CampaignAnalyser:
         if not self.providers:
             raise ValueError("No analysis providers configured.")
 
-        results: list[tuple[str, CampaignAnalysis]] = []
         failures: list[str] = []
 
-        with ThreadPoolExecutor(
-            max_workers=len(self.providers)
-        ) as executor:
-            futures = {
-                executor.submit(
-                    self._analyse_with_provider,
-                    provider_name,
-                    provider,
-                    prompt,
-                ) : provider_name
-                for provider_name, provider in self.providers
-            }
-
-            for future in as_completed(futures):
-                provider_name = futures[future]
-                try:
-                    results.append((provider_name, future.result()))
-                except Exception as e:
-                    failures.append(f"{provider_name}: {e}")
-
-        if len(results) < MIN_SUCCESSFUL_ANALYSES:
-            raise RuntimeError(
-                "Nirite couldn't get enough campaign analyses because "
-                "one or more AI providers are unavailable. "
-                "Please try again later."
-                + (
-                    "\nProvider errors: " + "; ".join(failures)
-                    if failures
-                    else ""
+        # Ministral is the primary analyser; Gemini is the backup used only
+        # if Ministral fails. Providers are tried in order; the first one that
+        # succeeds returns its analysis. This avoids the latency of running all
+        # providers in parallel (bounded by the slowest) while keeping a
+        # fallback for when the primary is unavailable or returns invalid output.
+        for provider_name, provider in self.providers:
+            try:
+                analysis = self._analyse_with_provider(
+                    provider_name, provider, prompt
                 )
-            )
+                return [analysis]
+            except Exception as e:
+                failures.append(f"{provider_name}: {e}")
+                continue
 
-        # as_completed yields by latency; sort so the parser input is stable
-        results.sort(key=lambda item: item[0])
-        return [analysis for _, analysis in results]
+        raise RuntimeError(
+            "Nirite couldn't get a campaign analysis because "
+            "one or more AI providers are unavailable. "
+            "Please try again later."
+            + ("\nProvider errors: " + "; ".join(failures) if failures else "")
+        )

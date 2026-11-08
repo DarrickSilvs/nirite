@@ -9,7 +9,6 @@ load_dotenv()
 
 OPENROUTER_MODEL = "openrouter/mistralai/ministral-3b-2512"
 GEMINI_MODEL = "gemini/gemini-3.1-flash-lite"
-NVIDIA_ANALYSIS_MODEL = "nvidia_nim/nvidia/nemotron-3.5-bolt-e4b"
 NVIDIA_PARSER_MODEL = "nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -85,7 +84,7 @@ def get_api_key(env_name: str) -> str:
     return api_key
 
 def build_analysis_providers() -> list[tuple[str, LLMProvider]]:
-    mistral = LiteLLMProvider(
+    ministral = LiteLLMProvider(
         api_key=get_api_key("MISTRAL_OPENROUTER_API_KEY"),
         model=OPENROUTER_MODEL,
     )
@@ -95,15 +94,11 @@ def build_analysis_providers() -> list[tuple[str, LLMProvider]]:
         model=GEMINI_MODEL,
     )
 
-    nemotron = LiteLLMProvider(
-        api_key=get_api_key("NVIDIA_BOLT_E4B_API_KEY"),
-        model=NVIDIA_ANALYSIS_MODEL,
-    )
-
+    # Ministral is the primary analyser; Gemini is the backup used only if
+    # Ministral fails. Nemotron Bolt has been removed from the analyser stack.
     return [
-        ("Ministral", mistral),
+        ("Ministral", ministral),
         ("Gemini", gemini),
-        ("Nemotron", nemotron),
     ]
 
 def build_parser_provider() -> LLMProvider:

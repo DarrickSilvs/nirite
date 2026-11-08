@@ -1,5 +1,4 @@
 import json
-import time
 
 import pytest
 
@@ -29,7 +28,6 @@ class FakeProvider:
 
     def generate_json(self, system_prompt, user_prompt, schema):
         self.calls += 1
-        time.sleep(self.delay)
         if self.error:
             raise self.error
         return analysis_json(self.objective)
@@ -39,45 +37,47 @@ class Err503(Exception):
     status_code = 503
 
 
-def test_results_are_ordered_by_provider_name_not_completion_time():
-    providers = [
-        ("Zeta", FakeProvider("zeta", delay=0.0)),
-        ("Alpha", FakeProvider("alpha", delay=0.15)),
-        ("Mid", FakeProvider("mid", delay=0.05)),
-    ]
-    results = CampaignAnalyser(providers).analyse("find logistics")
-    assert [r.objective for r in results] == ["alpha", "mid", "zeta"]
+def test_primary_provider_result_returned():
+    """Ministral (primary) succeeds — its analysis is returned, backup not called."""
+    primary = FakeProvider("primary")
+    backup = FakeProvider("backup")
+    results = CampaignAnalyser([("Primary", primary), ("Backup", backup)]).analyse("x")
+    assert [r.objective for r in results] == ["primary"]
+    assert primary.calls == 1
+    assert backup.calls == 0  # backup never invoked
 
 
-def test_two_of_three_is_enough():
-    providers = [
-        ("A", FakeProvider("a")),
-        ("B", FakeProvider("b", error=ValueError("boom"))),
-        ("C", FakeProvider("c")),
-    ]
-    assert len(CampaignAnalyser(providers).analyse("x")) == 2
+def test_fallback_used_when_primary_fails():
+    """Primary errors — backup (Gemini) result is returned."""
+    primary = FakeProvider("primary", error=ValueError("boom"))
+    backup = FakeProvider("backup")
+    results = CampaignAnalyser([("Primary", primary), ("Backup", backup)]).analyse("x")
+    assert [r.objective for r in results] == ["backup"]
+    assert primary.calls == 1
+    assert backup.calls == 1
 
 
-def test_one_of_three_raises():
-    providers = [
-        ("A", FakeProvider("a")),
-        ("B", FakeProvider("b", error=ValueError("boom"))),
-        ("C", FakeProvider("c", error=ValueError("boom"))),
-    ]
-    with pytest.raises(RuntimeError, match="couldn't get enough"):
-        CampaignAnalyser(providers).analyse("x")
+def test_all_providers_fail_raises():
+    """Both primary and backup fail — RuntimeError raised."""
+    primary = FakeProvider("primary", error=ValueError("boom"))
+    backup = FakeProvider("backup", error=ValueError("boom"))
+    with pytest.raises(RuntimeError, match="couldn't get a campaign analysis"):
+        CampaignAnalyser([("Primary", primary), ("Backup", backup)]).analyse("x")
 
 
-def test_503_is_retried_then_fails_after_max_attempts(monkeypatch):
+def test_primary_retried_on_503_then_fallback(monkeypatch):
+    """Primary fails with 503 MAX_ATTEMPTS times, then fallback succeeds."""
     monkeypatch.setattr(analyser_module.time, "sleep", lambda _: None)
-    flaky = FakeProvider("x", error=Err503())
-    providers = [("A", flaky), ("B", FakeProvider("b")), ("C", FakeProvider("c"))]
-
-    assert len(CampaignAnalyser(providers).analyse("x")) == 2
+    flaky = FakeProvider("primary", error=Err503())
+    backup = FakeProvider("backup")
+    results = CampaignAnalyser([("Primary", flaky), ("Backup", backup)]).analyse("x")
+    assert [r.objective for r in results] == ["backup"]
     assert flaky.calls == analyser_module.MAX_ATTEMPTS
+    assert backup.calls == 1
 
 
-def test_analysis_with_unknown_affected_criterion_is_rejected(monkeypatch):
+def test_invalid_primary_output_falls_back_to_backup():
+    """Primary returns invalid JSON/schema — fallback's valid result is used."""
     bad = json.loads(analysis_json("bad"))
     bad["ambiguities"] = [{
         "id": "A1", "topic": "size", "original_term": "mid",
@@ -85,8 +85,19 @@ def test_analysis_with_unknown_affected_criterion_is_rejected(monkeypatch):
     }]
 
     class BadProvider(FakeProvider):
-        def generate_json(self, *a, **k):
+        def generate_json(self, system_prompt, user_prompt, schema):
+            self.calls += 1
             return json.dumps(bad)
 
-    providers = [("A", BadProvider("a")), ("B", FakeProvider("b")), ("C", FakeProvider("c"))]
-    assert len(CampaignAnalyser(providers).analyse("x")) == 2
+    primary = BadProvider("primary")
+    backup = FakeProvider("backup")
+    results = CampaignAnalyser([("Primary", primary), ("Backup", backup)]).analyse("x")
+    assert [r.objective for r in results] == ["backup"]
+    assert primary.calls == 1
+    assert backup.calls == 1
+
+
+def test_empty_providers_raises():
+    """No providers configured — ValueError raised."""
+    with pytest.raises(ValueError, match="No analysis providers configured"):
+        CampaignAnalyser([]).analyse("x")
