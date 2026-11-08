@@ -9,7 +9,6 @@ load_dotenv()
 
 OPENROUTER_MODEL = "openrouter/mistralai/ministral-3b-2512"
 GEMINI_MODEL = "gemini/gemini-3.1-flash-lite"
-NVIDIA_PARSER_MODEL = "nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -101,8 +100,20 @@ def build_analysis_providers() -> list[tuple[str, LLMProvider]]:
         ("Gemini", gemini),
     ]
 
-def build_parser_provider() -> LLMProvider:
-    return LiteLLMProvider(
-        api_key=get_api_key("NVIDIA_550B_API_KEY"),
-        model=NVIDIA_PARSER_MODEL,
+def build_parser_provider() -> list[tuple[str, LLMProvider]]:
+    gemini = LiteLLMProvider(
+        api_key=get_api_key("GEMINI_FLASH_LITE_API_KEY"),
+        model=GEMINI_MODEL,
     )
+
+    ministral = LiteLLMProvider(
+        api_key=get_api_key("MISTRAL_OPENROUTER_API_KEY"),
+        model=OPENROUTER_MODEL,
+    )
+
+    # Gemini is the primary parser; Ministral is the backup used only if
+    # Gemini fails. Nemotron-550B has been removed from the parser stack.
+    return [
+        ("Gemini", gemini),
+        ("Ministral", ministral),
+    ]

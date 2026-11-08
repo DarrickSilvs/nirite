@@ -274,7 +274,7 @@ def campaign(
                 )
 
                 parser = CampaignParser(
-                    provider=build_parser_provider()
+                    providers=build_parser_provider()
                 )
 
                 result = parser.parse(prompt, analyses)

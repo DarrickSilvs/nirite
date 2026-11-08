@@ -12,9 +12,11 @@ from nirite.models.campaign_analysis import CampaignAnalysis, AnalysisCriterion
 def mock_provider():
     return MagicMock()
 
+
 @pytest.fixture
 def parser(mock_provider):
-    return CampaignParser(provider=mock_provider)
+    return CampaignParser(providers=[("mock", mock_provider)])
+
 
 @pytest.fixture
 def valid_analyses():
@@ -34,6 +36,7 @@ def valid_analyses():
             ambiguities=[],
         )
     ]
+
 
 @pytest.fixture
 def valid_response():
@@ -84,6 +87,7 @@ def valid_response():
         "status": "ready",
     }
 
+
 def test_parse_valid_campaign(
     parser,
     mock_provider,
@@ -104,21 +108,25 @@ def test_parse_valid_campaign(
 
     mock_provider.generate_json.assert_called_once()
 
+
 def test_parse_rejects_empty_prompt(parser, valid_analyses):
     with pytest.raises(ValueError, match="cannot be empty"):
         parser.parse("   ", valid_analyses)
 
+
 def test_parse_rejects_empty_response(parser, mock_provider, valid_analyses):
     mock_provider.generate_json.return_value = ""
 
-    with pytest.raises(ValueError, match="No content returned from model"):
+    with pytest.raises(RuntimeError, match="couldn't parse the campaign"):
         parser.parse("Find Australian SaaS companies", valid_analyses)
+
 
 def test_parse_rejects_invalid_json(parser, mock_provider, valid_analyses):
     mock_provider.generate_json.return_value = "This is not JSON"
 
-    with pytest.raises(ValueError, match="invalid JSON"):
+    with pytest.raises(RuntimeError, match="couldn't parse the campaign"):
         parser.parse("Find Australian SaaS companies", valid_analyses)
+
 
 def test_parse_rejects_invalid_campaign_schema(
     parser,
@@ -134,8 +142,9 @@ def test_parse_rejects_invalid_campaign_schema(
 
     mock_provider.generate_json.return_value = json.dumps(invalid_response)
 
-    with pytest.raises(ValueError, match="did not conform to the schema after one retry"):
+    with pytest.raises(RuntimeError, match="couldn't parse the campaign"):
         parser.parse("Find Australian SaaS companies", valid_analyses)
+
 
 def test_parse_overwrites_model_original_prompt(
     parser,
@@ -150,6 +159,7 @@ def test_parse_overwrites_model_original_prompt(
     result = parser.parse(prompt, valid_analyses)
 
     assert result.original_prompt == prompt
+
 
 def test_parse_passes_analyses_to_provider(
     parser,
@@ -199,10 +209,8 @@ def test_parser_rejects_clarification_with_dangling_reference(
     }]
     mock_provider.generate_json.return_value = json.dumps(valid_response)
 
-    with pytest.raises(ValueError, match="unknown criterion IDs"):
+    with pytest.raises(RuntimeError, match="couldn't parse the campaign"):
         parser.parse("Find Australian SaaS companies.", valid_analyses)
-
-    assert mock_provider.generate_json.call_count == 2  # one repair retry
 
 
 def test_parser_repair_retry_can_succeed(
