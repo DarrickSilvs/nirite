@@ -13,3 +13,4 @@ data/processed/*
 !data/processed/.gitkeep
 
 evals/results/
+.hermes.md

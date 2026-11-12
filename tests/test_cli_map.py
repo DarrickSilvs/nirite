@@ -16,11 +16,28 @@ RECORD = {
 }
 # field numbers: 1 full_name, 2 first_name, 3 last_name, 4 job_title, 5 company_name ...
 
+COMPANY_RECORD = {
+    "company_name": "Acme",
+    "industry": "Technology",
+    "source_file": "companies.csv",
+    "source_row": 2,
+    "extra_fields": {},
+}
+# company field numbers: 1 company_name, 2 company_domain, 3 company_website,
+# 4 industry, 5 company_size ...
+
 
 @pytest.fixture
 def prospects_file(tmp_path):
     f = tmp_path / "p.json"
     f.write_text(json.dumps([RECORD]))
+    return f
+
+
+@pytest.fixture
+def companies_file(tmp_path):
+    f = tmp_path / "c.json"
+    f.write_text(json.dumps([COMPANY_RECORD]))
     return f
 
 
@@ -81,6 +98,19 @@ def test_get_filename_windows_backslash_on_linux():
 def test_get_filename_never_returns_none():
     for stem in ["customers", "data/raw/customers.csv", "file", "a.b.c"]:
         assert get_filename(stem) is not None
+
+
+def test_map_detects_company_record_and_maps_company_field(companies_file):
+    # Move company_name (field 1) into a new extra field "Account".
+    result = CliRunner().invoke(
+        app, ["map", str(companies_file)],
+        input="1\n1\n99\ny\nAccount\n0\n",
+    )
+    assert result.exit_code == 0
+    assert result.exception is None
+    out = load(companies_file)
+    assert out["company_name"] is None
+    assert out["extra_fields"] == {"account": "Acme"}
 
 
 def test_ingest_default_output_path_is_stem_json(tmp_path):

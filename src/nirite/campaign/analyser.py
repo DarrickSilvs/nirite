@@ -1,6 +1,5 @@
 import json
 import time
-from typing import Any
 from pathlib import Path
 
 from pydantic import ValidationError

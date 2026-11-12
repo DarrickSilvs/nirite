@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Callable, TypeVar
 
 from pydantic import ValidationError
 
@@ -8,6 +9,7 @@ from nirite.campaign.llm.providers import build_parser_provider
 from nirite.models.campaign import CampaignDefinition
 from nirite.models.campaign_analysis import CampaignAnalysis
 
+T = TypeVar("T")
 
 PROMPT_PATH = Path(__file__).parent / "llm" / "prompts" / "campaign_parser.md"
 SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
@@ -63,6 +65,42 @@ def assign_stable_ids(data: dict) -> dict:
     return data
 
 
+def _validate_with_retry(
+    content: str,
+    provider,
+    system_prompt: str,
+    user_prompt: str,
+    schema: dict,
+    validate_func: Callable[[str], T],
+    error_context: str,
+    construct_retry_message: Callable[[str, str, Exception], str],
+    expected_exception=ValueError,
+) -> T:
+    """Validate content, retrying once by re-generating on failure.
+
+    Runs validate_func on the provided content. If it fails with
+    expected_exception, constructs a retry message via
+    construct_retry_message(user_prompt, content, error), calls
+    provider.generate_json again with the corrected prompt, and validates
+    the new content once more. Raises ValueError if both attempts fail.
+    """
+    try:
+        return validate_func(content)
+    except expected_exception as first_error:
+        retry_message = construct_retry_message(user_prompt, content, first_error)
+        content = provider.generate_json(
+            system_prompt=system_prompt, user_prompt=retry_message, schema=schema
+        )
+        if not content:
+            raise ValueError("No content returned from model.")
+        try:
+            return validate_func(content)
+        except expected_exception as second_error:
+            raise ValueError(
+                f"{error_context}: {second_error}"
+            ) from second_error
+
+
 class CampaignParser:
     def __init__(
         self,
@@ -83,7 +121,7 @@ class CampaignParser:
     ) -> CampaignDefinition:
         schema = CampaignDefinition.model_json_schema()
 
-        user_message = f"""
+        user_message = f"""\
            Original campaign description:
 
            {prompt}
@@ -108,61 +146,48 @@ class CampaignParser:
         if not content:
             raise ValueError("No content returned from model.")
 
-        try:
-            data = parse_json(content)
-        except ValueError as first_error:
-            if "No content returned" in str(first_error):
-                raise
-
-            retry_user_message = (
-                f"{user_message}\n\n"
-                f"Your previous response was not valid JSON:\n{content}\n\n"
+        # JSON parse with one retry
+        data = _validate_with_retry(
+            content=content,
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_message,
+            schema=schema,
+            validate_func=parse_json,
+            error_context="Model returned invalid JSON after one retry.",
+            construct_retry_message=lambda up, c, err: (
+                f"{up}\n\n"
+                f"Your previous response was not valid JSON:\n{c}\n\n"
                 "Return the same campaign definition as one complete JSON object "
                 "matching the supplied schema. Do not change its interpretation "
                 "or add commentary."
-            )
+            ),
+            expected_exception=ValueError,
+        )
 
-            content = provider.generate_json(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=retry_user_message,
-                schema=schema,
-            )
-            try:
-                data = parse_json(content)
-            except ValueError as second_error:
-                raise ValueError(
-                   "Model returned invalid JSON after one retry. "
-                   f"error={second_error}"
-                ) from second_error
-
-        try:
-            campaign = CampaignDefinition.model_validate(assign_stable_ids(data))
-        except ValidationError as first_error:
-            retry_user_message = (
-                f"{user_message}\n\n"
+        # Schema validation with one retry (re-serialize parsed data as JSON)
+        campaign = _validate_with_retry(
+            content=json.dumps(data),
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_message,
+            schema=schema,
+            validate_func=lambda c: CampaignDefinition.model_validate(
+                assign_stable_ids(parse_json(c))
+            ),
+            error_context="Model output did not conform to the schema after one retry.",
+            construct_retry_message=lambda up, c, err: (
+                f"{up}\n\n"
                 "Your previous response was valid JSON but did not match "
                 "the required CampaignDefinition schema.\n"
                 "Correct its structure using the supplied schema. Preserve "
                 "the campaign's interpretation and values. Return one complete "
                 "JSON object only.\n\n"
-                f"Validation error:\n{first_error}\n\n"
-                f"Previous response:\n{content}"
-            )
-
-            content = provider.generate_json(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=retry_user_message,
-                schema=schema,
-            )
-
-            try:
-                data = parse_json(content)
-                campaign = CampaignDefinition.model_validate(assign_stable_ids(data))
-            except (ValueError, ValidationError) as second_error:
-                raise ValueError(
-                   "Model output did not conform to the schema after one retry. "
-                   f"{second_error}"
-                ) from second_error
+                f"Validation error:\n{err}\n\n"
+                f"Previous response:\n{c}"
+            ),
+            expected_exception=ValidationError,
+        )
 
         campaign.original_prompt = prompt
         return campaign

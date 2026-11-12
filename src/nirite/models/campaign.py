@@ -70,6 +70,11 @@ class PredicateField(StrEnum):
     COUNTRY = "country"
     STATE = "state"
     CITY = "city"
+    INDUSTRY = "industry"
+    COMPANY_SIZE = "company_size"
+    REGION = "region"
+    LINKEDIN_URL = "linkedin_url"
+    DESCRIPTION = "description"
     
 class FieldPredicate(CampaignModel):
     field: PredicateField

@@ -319,4 +319,31 @@ def test_status_overrides_llm_provided_status(valid_campaign_data):
 def test_predicate_fields_exist_on_prospect():
     from nirite.models.prospect import Prospect
 
-    assert {f.value for f in PredicateField} <= set(Prospect.model_fields)
+    person_fields = {
+        PredicateField.FULL_NAME,
+        PredicateField.FIRST_NAME,
+        PredicateField.LAST_NAME,
+        PredicateField.JOB_TITLE,
+        PredicateField.COMPANY_NAME,
+        PredicateField.COMPANY_DOMAIN,
+        PredicateField.COMPANY_WEBSITE,
+        PredicateField.PROFILE_URL,
+        PredicateField.EMAIL,
+        PredicateField.COUNTRY,
+        PredicateField.STATE,
+        PredicateField.CITY,
+    }
+    assert {f.value for f in person_fields} <= set(Prospect.model_fields)
+
+
+def test_predicate_fields_exist_on_company_prospect():
+    from nirite.models.company import CompanyProspect
+
+    company_fields = {
+        PredicateField.INDUSTRY,
+        PredicateField.COMPANY_SIZE,
+        PredicateField.REGION,
+        PredicateField.LINKEDIN_URL,
+        PredicateField.DESCRIPTION,
+    }
+    assert {f.value for f in company_fields} <= set(CompanyProspect.model_fields)

@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from nirite!")
+from nirite.cli import app
+
+main = app
