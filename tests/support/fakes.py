@@ -19,11 +19,13 @@ class FakeLLMProvider:
         responses: list[str] | None = None,
         *,
         raises: type[Exception] | None = None,
+        model: str = "fake-model",
     ) -> None:
         self._responses: list[str] = list(responses or [])
         self._raises = raises
         self.call_log: list[tuple[str, str, dict]] = []
         self.call_count = 0
+        self.model = model
 
     def generate_json(
         self,
