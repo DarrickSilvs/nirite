@@ -1,14 +1,29 @@
 # Nirite
 
-AI-powered prospect qualification CLI. Turn natural-language campaign
-descriptions into qualified prospect lists through a three-layer pipeline:
+Finds the needle in your haystack.
 
-```
-Layer 0: Ingestion     CSV/XLSX → normalized prospects (zero LLM cost)
-Layer 1: Campaign spec → structured criteria + search queries (LLM)
-Layer 2: Retrieval     Deterministic filter + keyword + TF-IDF + RRF (zero LLM cost)
-Layer 3: Qualification → Jev-style bounded judging → qualified/not-qualified/bordered
-```
+AI-powered prospect qualification CLI. Turn a natural-language campaign description into a qualified prospect list from thousands of candidates.
+
+## What Nirite does
+
+Helps businesses find the right person to contact for their campaign — without manually sorting through thousands of prospects.
+
+## Three-layer pipeline
+
+**Layer 0 — Ingest** (zero LLM cost)
+- Load CSV/XLSX prospects → normalized JSON
+
+**Layer 1 — Campaign spec** (LLM)
+- Turn a prompt like *"Find mid-sized SaaS companies in Australia"* into structured criteria + search queries
+- Validated by a strict eval layer before saving
+
+**Layer 2 — Retrieve** (zero LLM cost)
+- Deterministic filter + keyword search + TF-IDF semantic search + RRF ranking
+- Returns top-N ranked candidates
+
+**Layer 3 — Qualify** (LLM)
+- Per-criterion structured checks + Jev-style bounded yes/no/unknown judging
+- Output: `qualified` / `not-qualified` / `bordered` verdicts with per-criterion breakdown
 
 ## Installation
 
@@ -16,96 +31,70 @@ Layer 3: Qualification → Jev-style bounded judging → qualified/not-qualified
 uv pip install -e .
 ```
 
+## Setup
+
+Create a `.env` file in the project root:
+
+```
+MISTRAL_OPENROUTER_API_KEY=your_openrouter_key
+GEMINI_FLASH_LITE_API_KEY=your_openrouter_key
+```
+
+Both keys go through OpenRouter (Ministral-3B and Gemini-3.1-Flash-Lite are free-tier models).
+
 ## Usage
 
-### Layer 0 — Ingest prospects
-
+### 1. Ingest prospects
 ```bash
 nirite ingest data/raw/prospects.csv --kind individual -o data/raw/prospects.json
-nirite ingest data/raw/companies.csv --kind company -o data/raw/companies.json
 ```
 
-### Layer 1 — Define a campaign
-
+### 2. Define a campaign
 ```bash
-nirite campaign "Find mid-sized SaaS companies in Australia for our sales outreach" -o campaign.json
+nirite campaign "Find mid-sized SaaS companies in Australia" -o campaign.json
 ```
 
-The campaign definition is validated by a strict eval layer before being saved. If the LLM output fails structural or semantic checks, the command exits with an error and no file is written.
-
-### Layer 2 — Retrieve candidates
-
+### 3. Retrieve candidates
 ```bash
-nirite retrieve data/raw/prospects.json campaign.json -o results.json
+nirite retrieve data/raw/prospects.json campaign.json -o results.json -n 30
 ```
 
-### Layer 3 — Qualify prospects
-
+### 4. Qualify prospects
 ```bash
 nirite qualify data/raw/prospects.json campaign.json -o qualified.json
 ```
 
-The `qualify` command runs Layer 2 retrieval then applies per-criterion Jev-style
-bounded judging to produce `qualified` / `not-qualified` / `bordered` verdicts
-with per-criterion breakdowns.
+## Zero-cost design
 
-## Eval layer
+- Ministral-3B and Gemini-3.1-Flash-Lite via OpenRouter (free tier)
+- TF-IDF + numpy for semantic retrieval — no vector DB, no paid APIs
+- Deterministic Tier 1 filter — zero LLM cost for screening
 
-Nirite includes a strict eval layer that validates Layer 1 LLM outputs before
-they reach retrieval:
-
-- **Deterministic checks**: schema validity, unique IDs, query count, weight
-  constraints, predicate pairing, clarification references
-- **Cross-artifact consistency**: detects dropped/invented/kind-flipped criteria,
-  uncovered facets, contradictory predicates
-- **Quality judge**: bounded yes/no/unknown rubric judging of definition fidelity
-  against the original prompt
-
-All evals run in strict mode — any ERROR finding blocks output.
-
-## Master evals
-
-Run end-to-end evals with the master eval orchestrator:
-
-```bash
-python -m nirite.eval.master
-```
-
-This builds campaign definitions, runs retrieval and qualification, computes
-precision/recall@K metrics, and triggers a bounded Layer 1 re-run if thresholds
-are breached.
-
-## Test suite
+## Tests
 
 ```bash
 uv run pytest -q
-```
-
-Live tests against real NIM Nemotron APIs (opt-in):
-
-```bash
-uv run pytest -m live tests/evals/live/
 ```
 
 ## Project structure
 
 ```
 src/nirite/
-  campaign/     Layer 1: campaign spec (analyser, parser, service, eval)
-  eval/         Eval layer: deterministic checks, bounded judge, master eval
+  campaign/     Layer 1: campaign spec + eval
+  eval/         Eval layer: deterministic checks, bounded judge, master evals
   ingestion/    Layer 0: CSV/XLSX ingestion
-  qualification/Layer 3: qualified/not-qualified/bordered verdicts
+  qualification/Layer 3: qualified / not-qualified / bordered verdicts
   retrieval/    Layer 2: Tier 1 filter + keyword + TF-IDF + RRF
-  cli.py        CLI: ingest, map, campaign, retrieve, qualify
+  cli.py        CLI: ingest, campaign, retrieve, qualify
 evals/
   golden/       Golden dataset: synthetic campaigns + labels
-  runs/         Trace regression dataset
 tests/          Unit tests
 ```
 
-## Zero-cost
+## License
 
-Nirite is designed to run entirely on free models:
-- Ministral-3B and Gemini-3.1-Flash-Lite via NVIDIA NIM / OpenRouter
-- TF-IDF + numpy for semantic retrieval (no vector DB required)
-- No paid models, no vector database, no paid APIs
+MIT — free to use, modify, and distribute.
+
+## Repository
+
+https://github.com/DarrickSilvs/nirite

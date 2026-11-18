@@ -1,7 +1,7 @@
 [project]
 name = "nirite"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-powered prospect qualification CLI"
 readme = "README.md"
 authors = [
     { name = "Darrick", email = "darricksilvester@gmail.com" }
