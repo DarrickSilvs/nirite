@@ -11,7 +11,6 @@ OPENROUTER_MODEL = "openrouter/mistralai/ministral-3b-2512"
 GEMINI_MODEL = "gemini/gemini-3.1-flash-lite"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 REQUEST_TIMEOUT = 180.0
 

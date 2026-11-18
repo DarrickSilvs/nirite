@@ -14,3 +14,4 @@ data/processed/*
 
 evals/results/
 .hermes.md
+.worktrees/
