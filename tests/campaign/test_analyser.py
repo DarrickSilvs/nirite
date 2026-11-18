@@ -7,18 +7,22 @@ from nirite.campaign.analyser import CampaignAnalyser
 
 
 def analysis_json(objective: str) -> str:
-    return json.dumps({
-        "target_type": "company",
-        "objective": objective,
-        "target_description": "Logistics companies",
-        "explicit_criteria": [{
-            "id": "C1",
-            "description": "Logistics",
-            "kind": "requirement",
-            "source_phrase": "logistics",
-        }],
-        "ambiguities": [],
-    })
+    return json.dumps(
+        {
+            "target_type": "company",
+            "objective": objective,
+            "target_description": "Logistics companies",
+            "explicit_criteria": [
+                {
+                    "id": "C1",
+                    "description": "Logistics",
+                    "kind": "requirement",
+                    "source_phrase": "logistics",
+                }
+            ],
+            "ambiguities": [],
+        }
+    )
 
 
 class FakeProvider:
@@ -79,10 +83,15 @@ def test_primary_retried_on_503_then_fallback(monkeypatch):
 def test_invalid_primary_output_falls_back_to_backup():
     """Primary returns invalid JSON/schema — fallback's valid result is used."""
     bad = json.loads(analysis_json("bad"))
-    bad["ambiguities"] = [{
-        "id": "A1", "topic": "size", "original_term": "mid",
-        "question": "?", "affected_criterion_ids": ["NOPE"],
-    }]
+    bad["ambiguities"] = [
+        {
+            "id": "A1",
+            "topic": "size",
+            "original_term": "mid",
+            "question": "?",
+            "affected_criterion_ids": ["NOPE"],
+        }
+    ]
 
     class BadProvider(FakeProvider):
         def generate_json(self, system_prompt, user_prompt, schema):
@@ -93,7 +102,7 @@ def test_invalid_primary_output_falls_back_to_backup():
     backup = FakeProvider("backup")
     results = CampaignAnalyser([("Primary", primary), ("Backup", backup)]).analyse("x")
     assert [r.objective for r in results] == ["backup"]
-    assert primary.calls == 1
+    assert primary.calls == analyser_module.MAX_ATTEMPTS
     assert backup.calls == 1
 
 

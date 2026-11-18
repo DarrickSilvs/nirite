@@ -4,23 +4,16 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from nirite.campaign.llm.providers import (
-    LLMProvider,
-    build_analysis_providers
-)
+from nirite.campaign.llm.providers import LLMProvider, build_analysis_providers
 from nirite.models.campaign_analysis import CampaignAnalysis
 
-PROMPT_PATH = (
-    Path(__file__).parent
-    / "llm"
-    / "prompts"
-    / "campaign_analyser.md"
-)
+PROMPT_PATH = Path(__file__).parent / "llm" / "prompts" / "campaign_analyser.md"
 
 SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 
 MAX_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 1
+
 
 def is_server_503(error: Exception) -> bool:
     status_code = getattr(error, "status_code", None)
@@ -34,7 +27,6 @@ def is_server_503(error: Exception) -> bool:
     response = getattr(error, "response", None)
     return getattr(response, "status_code", None) == 503
 
-    
 
 class CampaignAnalyser:
     def __init__(
@@ -42,9 +34,7 @@ class CampaignAnalyser:
         providers: list[tuple[str, LLMProvider]] | None = None,
     ) -> None:
         self.providers = (
-            providers
-            if providers is not None
-            else build_analysis_providers()
+            providers if providers is not None else build_analysis_providers()
         )
 
     def _analyse_with_provider(
@@ -62,33 +52,48 @@ class CampaignAnalyser:
                     user_prompt=prompt,
                     schema=schema,
                 )
-                break
+                data = json.loads(content)
+            except json.JSONDecodeError as e:
+                if attempt == MAX_ATTEMPTS:
+                    raise ValueError(
+                        f"Provider '{provider_name}' returned invalid JSON: {e}"
+                    ) from e
+                time.sleep(RETRY_DELAY_SECONDS * attempt)
+                continue
             except Exception as e:
                 if not is_server_503(e):
                     raise
-
                 if attempt == MAX_ATTEMPTS:
                     raise RuntimeError(
                         f"Provider '{provider_name}' failed after "
                         f"{MAX_ATTEMPTS} attempts due to 503 errors."
                     ) from e
-
                 time.sleep(RETRY_DELAY_SECONDS * attempt)
+                continue
 
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Provider '{provider_name}' returned invalid JSON: {e}"
-            ) from e
+            try:
+                return CampaignAnalysis.model_validate(data)
+            except ValidationError as e:
+                if attempt == MAX_ATTEMPTS:
+                    raise ValueError(
+                        f"{provider_name} returned invalid campaign analysis: {e}"
+                    ) from e
+                # Feed validation error back as a correction hint and retry
+                prompt = f"""{prompt}
 
-        try:
-            return CampaignAnalysis.model_validate(data)
-        except ValidationError as e:
-            raise ValueError(
-                f"{provider_name} returned invalid campaign analysis: "
-                f"{e}"
-            ) from e
+--- VALIDATION ERROR ---
+The previous output failed schema validation. Fix these issues:
+
+{e}
+
+Regenerate valid JSON addressing every issue above."""
+                time.sleep(RETRY_DELAY_SECONDS * attempt)
+                continue
+
+        # Unreachable — all return/raise paths are inside the loop
+        raise ValueError(
+            f"Provider '{provider_name}' exhausted all {MAX_ATTEMPTS} attempts"
+        )
 
     def analyse(self, prompt: str) -> list[CampaignAnalysis]:
         if not self.providers:
@@ -103,11 +108,9 @@ class CampaignAnalyser:
         # fallback for when the primary is unavailable or returns invalid output.
         for provider_name, provider in self.providers:
             try:
-                analysis = self._analyse_with_provider(
-                    provider_name, provider, prompt
-                )
+                analysis = self._analyse_with_provider(provider_name, provider, prompt)
                 return [analysis]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — catch-all for provider fallthrough
                 failures.append(f"{provider_name}: {e}")
                 continue
 
