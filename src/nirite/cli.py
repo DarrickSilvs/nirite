@@ -12,6 +12,7 @@ from nirite.ingestion.company_normalizer import normalise_company_file
 from nirite.models.prospect import Prospect
 from nirite.models.company import CompanyProspect
 
+from nirite.campaign.service import build_campaign_definition
 from nirite.eval.runner import EvalFailure
 from nirite.models.campaign import CampaignDefinition
 from nirite.retrieval.pipeline import run
