@@ -13,7 +13,13 @@ from nirite.campaign.llm.providers import (
     build_parser_provider,
 )
 from nirite.campaign.parser import CampaignParser
-from nirite.eval.models import EvalFinding, EvalMode, EvalReport, EvalSeverity
+from nirite.eval.models import (
+    EvalFinding,
+    EvalMode,
+    EvalReport,
+    EvalSeverity,
+    FindingCode,
+)
 from nirite.eval.runner import EvalFailure, run_definition_evals
 from nirite.models.campaign import CampaignDefinition
 
@@ -53,7 +59,8 @@ def build_campaign_definition(
                     mode=EvalMode.STRICT,
                     findings=[
                         EvalFinding(
-                            code="analysis_empty",
+                            check_id="check_analysis_empty",
+                            code=FindingCode.ANALYSIS_EMPTY,
                             path="analyses",
                             evidence="Analyser returned zero analyses",
                             severity=EvalSeverity.ERROR,
@@ -66,11 +73,15 @@ def build_campaign_definition(
 
         # Pass 2: Campaign Parsing
         definition = parser.parse(effective_prompt, analyses)
+        # Restore the clean original prompt — parse() may have stored a
+        # repair-enhanced prompt in original_prompt; we want the user's
+        # actual input preserved for downstream consumers.
+        definition.original_prompt = prompt
 
         # Pass 3: Strict eval gate
         report = run_definition_evals(
             definition,
-            analyses[0],  # type: ignore[arg-type]
+            analyses[0],
             mode=EvalMode.STRICT,
         )
         last_report = report
@@ -91,7 +102,6 @@ The previous output failed evaluation. Fix these issues before regenerating:
 Regenerate the campaign definition addressing every issue above."""
 
     # Exhausted all attempts — raise with the last report
-    assert last_report is not None
     raise EvalFailure(last_report)
 
 

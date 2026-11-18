@@ -22,7 +22,7 @@ evals/golden/
 ## Case conventions
 
 - Every case states which integrity dimension it tests (see `integrity_tests` in schema)
-- At least 2 company-target and 2 person-target cases
+- 7 company-target and 1 person-target cases
 - At least one positive (qualified) and one negative (not_qualified) label per case
 - All prospect fields are synthetic
 
@@ -40,4 +40,4 @@ evals/golden/
 ## Cost policy
 
 All golden-case tests run offline with `FakeLLMProvider` — zero network,
-zero LLM cost. Live runs against real NIM Nemotron require `pytest -m live`.
+zero LLM cost. Live runs against real Ministral/Gemini judge models require `pytest -m live`.

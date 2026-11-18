@@ -80,8 +80,9 @@ def test_primary_retried_on_503_then_fallback(monkeypatch):
     assert backup.calls == 1
 
 
-def test_invalid_primary_output_falls_back_to_backup():
+def test_invalid_primary_output_falls_back_to_backup(monkeypatch):
     """Primary returns invalid JSON/schema — fallback's valid result is used."""
+    monkeypatch.setattr(analyser_module.time, "sleep", lambda _: None)
     bad = json.loads(analysis_json("bad"))
     bad["ambiguities"] = [
         {

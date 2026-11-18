@@ -3,7 +3,7 @@
 Detects criteria the parser dropped, invented, or kind-flipped; flags criteria
 with no query facet coverage; detects contradictory requirement/exclusion
 pairs; and checks target_type alignment. All checks are deterministic —
-casefold + token-set Jaccard ≥ 0.8 matching, no embeddings, no LLM.
+description Jaccard similarity with an ID-match bonus, no embeddings, no LLM.
 """
 
 from __future__ import annotations
@@ -25,16 +25,22 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b)
 
 
-def _match_score(analysis_crit, definition_crit) -> float:
-    """ID-based match between analysis criterion and definition criterion.
+def _pair_score(a_crit, d_crit) -> float:
+    """Combined match score: description Jaccard + ID-match bonus.
 
     The analyser emits IDs like ``C1``, ``C2``; the parser assigns stable IDs
-    like ``c1``, ``c2`` via ``assign_stable_ids``. Normalize to lowercase and
-    compare directly — no fragile text similarity.
+    like ``c1``, ``c2`` via ``assign_stable_ids`` (positional renumbering).
+    Pure ID matching breaks when the parser drops/reorders criteria — an
+    analysis ``C1`` can be matched to a definition ``c1`` that was originally
+    ``C2``. Adding a description-Jaccard base score prevents false positives:
+    ID alignment boosts the score but cannot override description mismatch.
     """
-    analysis_id = analysis_crit.id.lower().strip()
-    definition_id = definition_crit.id.lower().strip()
-    return 1.0 if analysis_id == definition_id else 0.0
+    jaccard = _jaccard(
+        _token_set(a_crit.source_phrase or a_crit.description or ""),
+        _token_set(d_crit.description or ""),
+    )
+    id_bonus = 0.3 if a_crit.id.lower().strip() == d_crit.id.lower().strip() else 0.0
+    return min(1.0, jaccard + id_bonus)
 
 
 def _finding(
@@ -59,43 +65,61 @@ def _finding(
 def check_criteria_coverage(
     analysis: CampaignAnalysis, definition: CampaignDefinition
 ) -> list[EvalFinding]:
-    """Match analysis criteria to definition criteria; flag dropped/invented/extra."""
+    """Match analysis criteria to definition criteria; flag dropped/invented/extra.
+
+    Uses greedy matching on a combined score (description Jaccard + ID-match
+    bonus, threshold ≥ 0.8). ID alignment boosts the score but cannot override
+    description mismatch, which prevents false positives when the parser
+    renumbers criteria positionally.
+    """
     def_criteria = {c.id: c for c in definition.spec.criteria}
     findings: list[EvalFinding] = []
 
-    # Build a fuzzy match from analysis criteria to definition criteria by description similarity.
-    matched_def_ids: set[str] = set()
+    # Build all candidate pairs with scores ≥ 0.8
+    pairs: list[tuple[float, str, str]] = []
     for a_crit in analysis.explicit_criteria:
-        best_def_id: str | None = None
-        best_score = 0.0
-        for d_id, d_crit in def_criteria.items():
-            if d_id in matched_def_ids:
-                continue
-            score = _match_score(a_crit, d_crit)
-            if score > best_score:
-                best_score = score
-                best_def_id = d_id
+        for d_crit in def_criteria.values():
+            score = _pair_score(a_crit, d_crit)
+            if score >= 0.8:
+                pairs.append((score, a_crit.id, d_crit.id))
 
-        if best_def_id is not None and best_score >= 0.8:
-            matched_def_ids.add(best_def_id)
-            d_crit = def_criteria[best_def_id]
-            # Kind flip check
-            if a_crit.kind != d_crit.kind:
-                findings.append(
-                    _finding(
-                        check_id="check_criteria_coverage",
-                        code=FindingCode.CRITERION_KIND_FLIPPED,
-                        severity=EvalSeverity.ERROR,
-                        message=(
-                            f"criterion '{a_crit.id}' kind changed from "
-                            f"{a_crit.kind.value} to {d_crit.kind.value}"
-                        ),
-                        path=f"spec.criteria[{best_def_id}].kind",
-                        evidence=f"{a_crit.id}->{best_def_id}",
-                    )
-                )
-        else:
-            # Dropped: no definition criterion matched well enough
+    # Greedy assignment: highest score first, one-to-one
+    pairs.sort(key=lambda p: -p[0])
+    matched_analysis: set[str] = set()
+    matched_def: set[str] = set()
+    kind_flips: list[tuple[str, str]] = []
+
+    for _score, a_id, d_id in pairs:
+        if a_id in matched_analysis or d_id in matched_def:
+            continue
+        matched_analysis.add(a_id)
+        matched_def.add(d_id)
+        a_crit = next(c for c in analysis.explicit_criteria if c.id == a_id)
+        d_crit = def_criteria[d_id]
+        if a_crit.kind != d_crit.kind:
+            kind_flips.append((a_id, d_id))
+
+    # Kind flip findings
+    for a_id, d_id in kind_flips:
+        a_crit = next(c for c in analysis.explicit_criteria if c.id == a_id)
+        d_crit = def_criteria[d_id]
+        findings.append(
+            _finding(
+                check_id="check_criteria_coverage",
+                code=FindingCode.CRITERION_KIND_FLIPPED,
+                severity=EvalSeverity.ERROR,
+                message=(
+                    f"criterion '{a_id}' kind changed from "
+                    f"{a_crit.kind.value} to {d_crit.kind.value}"
+                ),
+                path=f"spec.criteria[{d_id}].kind",
+                evidence=f"{a_id}->{d_id}",
+            )
+        )
+
+    # Dropped: analysis criteria not matched
+    for a_crit in analysis.explicit_criteria:
+        if a_crit.id not in matched_analysis:
             findings.append(
                 _finding(
                     check_id="check_criteria_coverage",
@@ -112,7 +136,7 @@ def check_criteria_coverage(
 
     # Invented: definition criteria not matched to any analysis criterion
     for d_id, d_crit in def_criteria.items():
-        if d_id not in matched_def_ids:
+        if d_id not in matched_def:
             findings.append(
                 _finding(
                     check_id="check_criteria_coverage",

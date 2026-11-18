@@ -43,6 +43,7 @@ class FindingCode(StrEnum):
     SEMANTIC_WITH_PREDICATE = "semantic_with_predicate"
     CLARIFICATION_REFERENCES_UNKNOWN = "clarification_references_unknown"
     NEEDS_CLARIFICATION_INCOHERENT = "needs_clarification_incoherent"
+    ANALYSIS_EMPTY = "analysis_empty"
 
     # Cross-artifact consistency (analysis vs definition)
     CRITERION_DROPPED = "criterion_dropped"
