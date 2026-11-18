@@ -12,7 +12,6 @@ from nirite.ingestion.company_normalizer import normalise_company_file
 from nirite.models.prospect import Prospect
 from nirite.models.company import CompanyProspect
 
-from nirite.campaign.service import build_campaign_definition
 from nirite.eval.runner import EvalFailure
 from nirite.models.campaign import CampaignDefinition
 from nirite.retrieval.pipeline import run
@@ -215,6 +214,37 @@ def _detect_prospect_model_class(
     return Prospect
 
 
+def load_prospects(path: Path) -> list[Prospect | CompanyProspect]:
+    """Load prospects from a JSON file, auto-detecting individual vs company.
+
+    Uses the same model-detection heuristic as the `map` command, so company
+    records are not silently dropped (the bug that plagued `retrieve` before
+    this unification).
+    """
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        console.print(f"[red]Error loading prospects file:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    model_class = _detect_prospect_model_class(records)
+
+    prospects: list[Prospect | CompanyProspect] = []
+    for record in records:
+        try:
+            prospects.append(model_class.model_validate(record))
+        except ValueError as e:
+            console.print(
+                f"[yellow]Warning:[/yellow] Skipping invalid prospect record: {e}"
+            )
+
+    if not prospects:
+        console.print("[red]No valid prospects found in the input file.[/red]")
+        raise typer.Exit(code=1)
+
+    return prospects
+
+
 @app.command()
 def map(
     input_path: Path = typer.Argument(
@@ -404,12 +434,7 @@ def retrieve(
 ):
     """Run Layer 2 retrieval: match ingested prospects against a campaign definition."""
 
-    # Load prospects JSON
-    try:
-        prospects_data = json.loads(prospects_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        console.print(f"[red]Error loading prospects file:[/red] {e}")
-        raise typer.Exit(code=1) from e
+    prospects = load_prospects(prospects_path)
 
     # Load campaign JSON
     try:
@@ -417,20 +442,6 @@ def retrieve(
     except (OSError, json.JSONDecodeError) as e:
         console.print(f"[red]Error loading campaign file:[/red] {e}")
         raise typer.Exit(code=1) from e
-
-    # Build Prospect objects
-    prospects = []
-    for record in prospects_data:
-        try:
-            prospects.append(Prospect.model_validate(record))
-        except ValueError as e:
-            console.print(
-                f"[yellow]Warning:[/yellow] Skipping invalid prospect record: {e}"
-            )
-
-    if not prospects:
-        console.print("[red]No valid prospects found in the input file.[/red]")
-        raise typer.Exit(code=1)
 
     # Build CampaignDefinition
     try:
@@ -515,6 +526,143 @@ def retrieve(
             encoding="utf-8",
         )
         console.print(f"\n[green]Saved results to {output_path}[/green]")
+
+
+if __name__ == "__main__":
+    app()
+
+
+@app.command()
+def qualify(
+    prospects_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        readable=True,
+        resolve_path=True,
+        help="Path to ingested prospects JSON file (Layer 0 output).",
+    ),
+    campaign_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        readable=True,
+        resolve_path=True,
+        help="Path to campaign definition JSON file (Layer 1 output).",
+    ),
+    top_n: int = typer.Option(
+        20,
+        "--top-n",
+        "-n",
+        help="Maximum number of candidates to return.",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Path to save the qualification results JSON file.",
+    ),
+    include_bordered: bool = typer.Option(
+        False,
+        "--include-bordered",
+        help="Include bordered prospects in the display table.",
+    ),
+    judge_model: str = typer.Option(
+        "default",
+        "--judge-model",
+        help="Judge model to use: 'default' (Ministral) or 'backup' (Gemini).",
+    ),
+):
+    """Run Layer 3 qualification: turn Layer 2 candidates into qualified prospects."""
+
+    from nirite.campaign.analyser import CampaignAnalyser
+    from nirite.campaign.llm.providers import build_analysis_providers
+    from nirite.judge.provider import get_judge_client
+    from nirite.models.campaign import CampaignDefinition
+    from nirite.qualification.models import VerdictStatus
+    from nirite.qualification.qualifier import qualify_from_retrieval_output
+    from nirite.retrieval.pipeline import run as retrieval_run
+
+    # Load prospects
+    prospects = load_prospects(prospects_path)
+
+    # Load campaign
+    try:
+        campaign_data = json.loads(campaign_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        console.print(f"[red]Error loading campaign file:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    try:
+        campaign = CampaignDefinition.model_validate(campaign_data)
+    except ValueError as e:
+        console.print(f"[red]Invalid campaign definition:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    # Run Layer 2 retrieval
+    retrieval_output = retrieval_run(prospects, campaign, top_n=top_n)
+
+    # Get judge client
+    backup = judge_model != "default"
+    judge_client = get_judge_client(backup=backup)
+
+    # Build analysis from campaign (for question planning)
+    analyser = CampaignAnalyser(providers=build_analysis_providers())
+    analyses = analyser.analyse(campaign.original_prompt)
+
+    # Qualify
+    try:
+        qualification_output = qualify_from_retrieval_output(
+            retrieval_output, campaign, analyses[0], judge_client
+        )
+    except EvalFailure as e:
+        console.print("[red]Qualification eval failed.[/red]")
+        raise typer.Exit(code=1) from e
+    except ValueError as e:
+        console.print(f"[red]Qualification failed:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    # Display results
+    console.print("\n[bold cyan]Layer 3 Qualification Results[/bold cyan]")
+    console.print(f"Campaign: {qualification_output.campaign_hash}")
+    console.print(f"Judge model: {qualification_output.judge_model}")
+    console.print(f"Qualified: {qualification_output.qualified_count}")
+    console.print(f"Not qualified: {qualification_output.not_qualified_count}")
+    console.print(f"Bordered: {qualification_output.bordered_count}")
+
+    results_table = Table(title="Qualified Prospects")
+    results_table.add_column("Rank", style="cyan")
+    results_table.add_column("Prospect", style="green")
+    results_table.add_column("Type", style="blue")
+    results_table.add_column("Verdict", style="magenta")
+    results_table.add_column("Preference", style="yellow")
+    results_table.add_column("Reasons", style="white")
+
+    for verdict in qualification_output.verdicts:
+        if verdict.status == VerdictStatus.BORDERED and not include_bordered:
+            continue
+        status_style = {
+            VerdictStatus.QUALIFIED: "green",
+            VerdictStatus.NOT_QUALIFIED: "red",
+            VerdictStatus.BORDERED: "yellow",
+        }[verdict.status]
+        results_table.add_row(
+            str(verdict.rank),
+            verdict.prospect_label,
+            verdict.criterion_verdicts[0].kind if verdict.criterion_verdicts else "n/a",
+            f"[{status_style}]{verdict.status.value}[/{status_style}]",
+            f"{verdict.preference_score:.2f}",
+            "; ".join(verdict.reasons) if verdict.reasons else "-",
+        )
+
+    console.print(results_table)
+
+    # Optional JSON persistence
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            qualification_output.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+        console.print(f"\n[green]Saved qualification to {output_path}[/green]")
 
 
 if __name__ == "__main__":
