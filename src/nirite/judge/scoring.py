@@ -33,8 +33,8 @@ def score_verdict(
     if not questions:
         return 0.0
 
-    question_ids = {q.id for q in questions}
-    answer_ids = [a.question_id for a in answers]
+    question_ids = {q.id.lower() for q in questions}
+    answer_ids = [a.question_id.lower() for a in answers]
 
     # Duplicate answer ids
     if len(answer_ids) != len(set(answer_ids)):
@@ -50,11 +50,11 @@ def score_verdict(
     if extra:
         raise JudgeScoringError(f"answers for unknown questions: {sorted(extra)}")
 
-    answer_map = {a.question_id: a for a in answers}
+    answer_map = {a.question_id.lower(): a for a in answers}
 
     yes_count = 0
     for question in questions:
-        answer = answer_map[question.id]
+        answer = answer_map[question.id.lower()]
         is_yes = _is_yes(question, answer)
         if is_yes:
             yes_count += 1

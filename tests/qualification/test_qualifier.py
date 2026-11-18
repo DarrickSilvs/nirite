@@ -292,6 +292,64 @@ def test_qualify_semantic_criterion() -> None:
     assert client.provider.call_count == 1
 
 
+def test_qualify_case_insensitive_id_matching() -> None:
+    """Definition criteria use lowercase IDs (c1, c2) from assign_stable_ids,
+    but re-analysed analysis uses uppercase IDs (C1, C2). Match must be
+    case-insensitive, otherwise semantic criteria get 'not evaluated' → unknown.
+    """
+    prospect_data = {
+        "full_name": "Jane Doe",
+        "job_title": "Engineering Manager",
+        "company_name": "Acme",
+        "country": "Australia",
+        "source_file": "test.csv",
+        "source_row": 1,
+    }
+    candidate = _make_candidate(prospect_data=prospect_data)
+
+    # Definition criteria: lowercase IDs (parser-assigned)
+    structured = _make_criterion(
+        id="c1",
+        kind=CriterionKind.REQUIREMENT,
+        mode=EvaluationMode.STRUCTURED,
+        field=PredicateField.COUNTRY,
+        operator=PredicateOperator.EQ,
+        value="Australia",
+    )
+    semantic = _make_criterion(
+        id="c2",
+        kind=CriterionKind.PREFERENCE,
+        mode=EvaluationMode.SEMANTIC,
+    )
+    definition = _make_definition(criteria=[structured, semantic])
+
+    # Re-analysed criteria: uppercase IDs (analyser-assigned)
+    analysis = _make_analysis(
+        criteria=[
+            _make_analysis_criterion(id="C1", kind=CriterionKind.REQUIREMENT),
+            _make_analysis_criterion(id="C2", kind=CriterionKind.PREFERENCE),
+        ]
+    )
+
+    # Judge answers YES for the semantic question
+    client = _make_judge_client(
+        responses=[
+            '{"answers": [{"question_id": "c2.q1", "answer": "yes", "evidence_field": "job_title", "evidence_quote": "Engineering Manager"}]}'
+        ]
+    )
+    output = qualify([candidate], definition, analysis, client)
+
+    assert output.verdicts[0].status == VerdictStatus.QUALIFIED
+    assert client.provider.call_count == 1  # judge was called
+    # Verify the semantic criterion was actually evaluated, not "not evaluated"
+    semantic_v = next(
+        cv for cv in output.verdicts[0].criterion_verdicts if cv.criterion_id == "c2"
+    )
+    assert semantic_v.status != "unknown"
+    assert semantic_v.evidence != "not evaluated"
+    assert len(semantic_v.judge_answer_ids) > 0
+
+
 def test_qualify_judge_error_propagates() -> None:
     """JudgeError propagates — no partial output."""
     prospect_data = {

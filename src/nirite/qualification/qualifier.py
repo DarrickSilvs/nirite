@@ -115,7 +115,9 @@ def qualify(
         )
 
     criteria = definition.spec.criteria
-    analysis_by_id = {c.id: c for c in analysis.explicit_criteria}
+    # Case-insensitive lookup: analyser emits IDs like C1/C2, parser assigns
+    # c1/c2. Match case-insensitively so criteria link back to their analysis.
+    analysis_by_id = {c.id.lower(): c for c in analysis.explicit_criteria}
 
     # Split criteria by evaluation mode
     structured = [c for c in criteria if c.evaluation_mode.value == "structured"]
@@ -125,7 +127,7 @@ def qualify(
 
     # Plan judge questions for semantic/hybrid criteria (from AnalysisCriterion)
     analysis_semantic = [
-        analysis_by_id[c.id] for c in semantic if c.id in analysis_by_id
+        analysis_by_id[c.id.lower()] for c in semantic if c.id.lower() in analysis_by_id
     ]
     questions = plan_questions(analysis_semantic)
 
@@ -193,14 +195,18 @@ def qualify(
 
                 questions_by_criterion: dict[str, list[JudgeQuestion]] = {}
                 for q in questions:
-                    questions_by_criterion.setdefault(q.criterion_id, []).append(q)
+                    # Case-insensitive keys: plan_questions uses analysis
+                    # criterion IDs (may be uppercase), definition criteria
+                    # use lowercase IDs from assign_stable_ids.
+                    questions_by_criterion.setdefault(
+                        q.criterion_id.lower(), []
+                    ).append(q)
 
                 for crit in semantic:
-                    crit_questions = questions_by_criterion.get(crit.id, [])
+                    crit_questions = questions_by_criterion.get(crit.id.lower(), [])
+                    crit_question_ids = {q.id.lower() for q in crit_questions}
                     crit_answers = [
-                        a
-                        for a in answers
-                        if a.question_id in {q.id for q in crit_questions}
+                        a for a in answers if a.question_id.lower() in crit_question_ids
                     ]
                     score = score_verdict(crit_questions, crit_answers)
                     status = (
