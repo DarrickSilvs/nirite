@@ -26,10 +26,15 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 
 
 def _match_score(analysis_crit, definition_crit) -> float:
-    """Token-set Jaccard between description/source_phrase and definition description."""
-    analysis_text = analysis_crit.source_phrase or analysis_crit.description or ""
-    def_text = definition_crit.description or ""
-    return _jaccard(_token_set(analysis_text), _token_set(def_text))
+    """ID-based match between analysis criterion and definition criterion.
+
+    The analyser emits IDs like ``C1``, ``C2``; the parser assigns stable IDs
+    like ``c1``, ``c2`` via ``assign_stable_ids``. Normalize to lowercase and
+    compare directly — no fragile text similarity.
+    """
+    analysis_id = analysis_crit.id.lower().strip()
+    definition_id = definition_crit.id.lower().strip()
+    return 1.0 if analysis_id == definition_id else 0.0
 
 
 def _finding(
