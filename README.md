@@ -1,29 +1,41 @@
 # Nirite
 
-Finds the needle in your haystack.
+A CLI tool that finds the right prospects for your campaign out of thousands of candidates.
 
-AI-powered prospect qualification CLI. Turn a natural-language campaign description into a qualified prospect list from thousands of candidates.
+Nirite helps you go from a raw list of prospects to a shortlist of people actually worth contacting. You describe your campaign in plain language, and Nirite turns that into structured criteria, filters your prospect list, and scores each candidate against your criteria.
 
-## What Nirite does
+## What it does
 
-Helps businesses find the right person to contact for their campaign — without manually sorting through thousands of prospects.
+You start with a CSV or Excel file of prospects. Nirite normalizes it into JSON. Then you describe your campaign — for example, "find mid-sized SaaS companies in Australia looking for sales outreach." Nirite converts that into structured criteria (country, industry, company size, job title, etc.) and search queries.
 
-## Three-layer pipeline
+Next, it runs those queries against your prospect list using a mix of deterministic filtering and keyword search, returning a ranked set of candidates. Finally, it evaluates each candidate against your criteria using structured checks and a bounded yes/no judge model, giving each prospect a verdict: qualified, not qualified, or bordered.
 
-**Layer 0 — Ingest** (zero LLM cost)
-- Load CSV/XLSX prospects → normalized JSON
+## Three steps
 
-**Layer 1 — Campaign spec** (LLM)
-- Turn a prompt like *"Find mid-sized SaaS companies in Australia"* into structured criteria + search queries
-- Validated by a strict eval layer before saving
+**Step 1: Ingest your prospects**
 
-**Layer 2 — Retrieve** (zero LLM cost)
-- Deterministic filter + keyword search + TF-IDF semantic search + RRF ranking
-- Returns top-N ranked candidates
+```bash
+nirite ingest data/raw/prospects.csv --kind individual -o data/raw/prospects.json
+```
 
-**Layer 3 — Qualify** (LLM)
-- Per-criterion structured checks + Jev-style bounded yes/no/unknown judging
-- Output: `qualified` / `not-qualified` / `bordered` verdicts with per-criterion breakdown
+Load a CSV or XLSX file of individual or company prospects. Nirite normalizes the columns into a standard JSON format.
+
+**Step 2: Define your campaign**
+
+```bash
+nirite campaign "Find mid-sized SaaS companies in Australia" -o campaign.json
+```
+
+Describe your campaign in plain language. Nirite converts it into structured criteria and search queries, then runs them through a strict eval layer to make sure nothing was dropped or invented before saving.
+
+**Step 3: Retrieve and qualify**
+
+```bash
+nirite retrieve data/raw/prospects.json campaign.json -o results.json -n 30
+nirite qualify data/raw/prospects.json campaign.json -o qualified.json
+```
+
+The `retrieve` command filters and ranks your prospects based on the campaign criteria. The `qualify` command takes those candidates and evaluates each one against your criteria, producing qualified, not qualified, or bordered verdicts with reasons for each.
 
 ## Installation
 
@@ -40,35 +52,17 @@ MISTRAL_OPENROUTER_API_KEY=your_openrouter_key
 GEMINI_FLASH_LITE_API_KEY=your_openrouter_key
 ```
 
-Both keys go through OpenRouter (Ministral-3B and Gemini-3.1-Flash-Lite are free-tier models).
+Both keys go through OpenRouter. Ministral-3B and Gemini-3.1-Flash-Lite are free-tier models, so you can run Nirite without paying for LLM API calls.
 
-## Usage
+## How it works
 
-### 1. Ingest prospects
-```bash
-nirite ingest data/raw/prospects.csv --kind individual -o data/raw/prospects.json
-```
+Nirite uses three layers:
 
-### 2. Define a campaign
-```bash
-nirite campaign "Find mid-sized SaaS companies in Australia" -o campaign.json
-```
+1. **Ingest** — CSV/XLSX to normalized JSON. No LLM calls.
+2. **Campaign spec** — plain language to structured criteria. Uses an LLM with a strict eval gate.
+3. **Retrieve and qualify** — filter, rank, and score candidates. Uses deterministic checks for structured criteria and a yes/no judge model for semantic criteria.
 
-### 3. Retrieve candidates
-```bash
-nirite retrieve data/raw/prospects.json campaign.json -o results.json -n 30
-```
-
-### 4. Qualify prospects
-```bash
-nirite qualify data/raw/prospects.json campaign.json -o qualified.json
-```
-
-## Zero-cost design
-
-- Ministral-3B and Gemini-3.1-Flash-Lite via OpenRouter (free tier)
-- TF-IDF + numpy for semantic retrieval — no vector DB, no paid APIs
-- Deterministic Tier 1 filter — zero LLM cost for screening
+The retrieval layer uses TF-IDF and numpy for semantic search, so you do not need a vector database. The Tier 1 filter uses deterministic rules, keeping LLM costs low.
 
 ## Tests
 
