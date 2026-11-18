@@ -290,6 +290,56 @@ def test_dropped_first_criterion_no_false_kind_flip() -> None:
     assert FindingCode.CRITERION_INVENTED not in codes
 
 
+def test_source_phrase_fragment_matches_full_description() -> None:
+    """Analysis source_phrase is a short fragment, description is full text.
+
+    Real analyser output often has source_phrase as a short extracted
+    fragment (e.g. "executive director") while description is the full
+    criterion sentence. Matching should use description for both sides.
+    """
+    analysis = build_analysis(
+        criteria=[
+            build_analysis_criterion(
+                id="C1",
+                description="Must hold an executive or director-level position",
+                kind=CriterionKind.REQUIREMENT,
+                source_phrase="executive director",
+            ),
+            build_analysis_criterion(
+                id="C2",
+                description="Must be in the HR function",
+                kind=CriterionKind.REQUIREMENT,
+                source_phrase="HR",
+            ),
+        ]
+    )
+    definition = build_definition(
+        criteria=[
+            build_criterion(
+                id="c1",
+                description="Must hold an executive or director-level position.",
+                kind=CriterionKind.REQUIREMENT,
+                evaluation_mode=EvaluationMode.STRUCTURED,
+            ),
+            build_criterion(
+                id="c2",
+                description="Must be in the HR function.",
+                kind=CriterionKind.REQUIREMENT,
+                evaluation_mode=EvaluationMode.STRUCTURED,
+            ),
+        ],
+        queries=[
+            build_search_query(id="q1", query="executive", facet=SearchFacet.ROLE),
+            build_search_query(id="q2", query="HR function", facet=SearchFacet.ROLE),
+        ],
+    )
+    findings = check_consistency(analysis, definition)
+    codes = [f.code for f in findings]
+    assert FindingCode.CRITERION_DROPPED not in codes
+    assert FindingCode.CRITERION_INVENTED not in codes
+    assert FindingCode.CRITERION_KIND_FLIPPED not in codes
+
+
 def test_all_findings_reported() -> None:
     analysis = build_analysis(
         criteria=[

@@ -34,11 +34,15 @@ def _pair_score(a_crit, d_crit) -> float:
     analysis ``C1`` can be matched to a definition ``c1`` that was originally
     ``C2``. Adding a description-Jaccard base score prevents false positives:
     ID alignment boosts the score but cannot override description mismatch.
+
+    Uses ``description`` for both sides (the full criterion text) rather than
+    ``source_phrase`` on the analysis side, which may be a short extracted
+    fragment that doesn't align with the definition's full description.
+    Falls back to ``source_phrase`` only when ``description`` is empty.
     """
-    jaccard = _jaccard(
-        _token_set(a_crit.source_phrase or a_crit.description or ""),
-        _token_set(d_crit.description or ""),
-    )
+    a_text = a_crit.description or a_crit.source_phrase or ""
+    d_text = d_crit.description or ""
+    jaccard = _jaccard(_token_set(a_text), _token_set(d_text))
     id_bonus = 0.3 if a_crit.id.lower().strip() == d_crit.id.lower().strip() else 0.0
     return min(1.0, jaccard + id_bonus)
 
