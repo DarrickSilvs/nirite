@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from nirite.eval.models import EvalFinding, EvalSeverity, FindingCode
 from nirite.models.campaign import (
     CampaignDefinition,
+    CampaignStatus,
     CriterionKind,
     EvaluationMode,
 )
@@ -265,7 +266,7 @@ def check_needs_clarification_coherence(
     has_clarifications = len(definition.clarifications) > 0
     findings: list[EvalFinding] = []
 
-    if has_clarifications and definition.status.value == "ready":
+    if has_clarifications and definition.status == CampaignStatus.READY:
         findings.append(
             _finding(
                 check_id="check_needs_clarification_coherence",
@@ -277,7 +278,10 @@ def check_needs_clarification_coherence(
             )
         )
 
-    if not has_clarifications and definition.status.value == "needs_clarification":
+    if (
+        not has_clarifications
+        and definition.status == CampaignStatus.NEEDS_CLARIFICATION
+    ):
         findings.append(
             _finding(
                 check_id="check_needs_clarification_coherence",
