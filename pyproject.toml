@@ -34,3 +34,10 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.3",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: tests that call real LLM APIs (deselected by default).",
+    "slow: tests that take a long time to run.",
+]
+addopts = ["-m", "not live"]
