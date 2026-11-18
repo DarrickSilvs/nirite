@@ -15,7 +15,8 @@ Next, it runs those queries against your prospect list using a mix of determinis
 **Step 1: Ingest your prospects**
 
 ```bash
-nirite ingest data/raw/prospects.csv --kind individual -o data/raw/prospects.json
+uv run python -m nirite ingest data/raw/prospects.csv --kind individual -o data/raw/prospects.json
+uv run python -m nirite ingest data/raw/companies.csv --kind company -o data/raw/companies.json
 ```
 
 Load a CSV or XLSX file of individual or company prospects. Nirite normalizes the columns into a standard JSON format.
@@ -23,7 +24,7 @@ Load a CSV or XLSX file of individual or company prospects. Nirite normalizes th
 **Step 2: Define your campaign**
 
 ```bash
-nirite campaign "Find mid-sized SaaS companies in Australia" -o campaign.json
+uv run python -m nirite campaign "Find mid-sized SaaS companies in Australia" -o campaign.json
 ```
 
 Describe your campaign in plain language. Nirite converts it into structured criteria and search queries, then runs them through a strict eval layer to make sure nothing was dropped or invented before saving.
@@ -31,11 +32,13 @@ Describe your campaign in plain language. Nirite converts it into structured cri
 **Step 3: Retrieve and qualify**
 
 ```bash
-nirite retrieve data/raw/prospects.json campaign.json -o results.json -n 30
-nirite qualify data/raw/prospects.json campaign.json -o qualified.json
+uv run python -m nirite retrieve data/raw/prospects.json campaign.json -o results.json -n 30
+uv run python -m nirite qualify data/raw/prospects.json campaign.json -o qualified.json
 ```
 
 The `retrieve` command filters and ranks your prospects based on the campaign criteria. The `qualify` command takes those candidates and evaluates each one against your criteria, producing qualified, not qualified, or bordered verdicts with reasons for each.
+
+After installing with `uv pip install -e .`, you can also run `nirite` directly instead of `uv run python -m nirite`.
 
 ## Installation
 
