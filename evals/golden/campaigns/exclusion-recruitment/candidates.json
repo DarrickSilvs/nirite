@@ -1,0 +1,94 @@
+[
+  {
+    "source_file": "companies.csv",
+    "source_row": 2,
+    "company_name": "SaaSify Australia Pty Ltd",
+    "industry": "Software",
+    "company_size": "51-200",
+    "country": "Australia",
+    "description": "B2B SaaS platform",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 3,
+    "company_name": "TechRecruit Agency",
+    "industry": "Recruitment",
+    "company_size": "11-50",
+    "country": "Australia",
+    "description": "Recruitment and staffing services",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 4,
+    "company_name": "Sydney Staffing Solutions",
+    "industry": "Recruitment",
+    "company_size": "1-10",
+    "country": "Australia",
+    "description": "Temporary staffing and placement",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 5,
+    "company_name": "Enterprise Software Co",
+    "industry": "Software",
+    "company_size": "201-500",
+    "country": "Germany",
+    "description": "Enterprise B2B software",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 6,
+    "company_name": "Melbourne Dev Agency",
+    "industry": "Software",
+    "company_size": "11-50",
+    "country": null,
+    "city": "Melbourne",
+    "state": "Victoria",
+    "description": "Custom software development",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 7,
+    "company_name": "StaffingPro",
+    "industry": "Recruitment",
+    "company_size": "11-50",
+    "country": "Australia",
+    "description": "Recruitment agency",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 8,
+    "company_name": "Brisbane Tech Pty Ltd",
+    "industry": "Software",
+    "company_size": "1-10",
+    "country": "Australia",
+    "description": "B2B technology solutions",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 9,
+    "company_name": "Perth Software",
+    "industry": "Software",
+    "company_size": "51-200",
+    "country": null,
+    "city": "Perth",
+    "state": "Western Australia",
+    "description": "B2B software",
+    "full_name": null,
+    "job_title": null
+  }
+]

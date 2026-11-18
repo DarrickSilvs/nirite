@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nirite Golden Case",
+  "description": "Schema for a golden campaign/evaluation case.",
+  "type": "object",
+  "required": ["prompt", "expected", "candidates", "labels"],
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "description": "The original natural-language campaign description."
+    },
+    "expected": {
+      "type": "object",
+      "description": "Expected campaign definition characteristics.",
+      "properties": {
+        "criteria_count_min": {"type": "integer", "minimum": 1},
+        "criteria_count_max": {"type": "integer", "minimum": 1},
+        "required_kind_count_min": {"type": "integer", "minimum": 0},
+        "preference_kind_count_min": {"type": "integer", "minimum": 0},
+        "exclusion_kind_count_min": {"type": "integer", "minimum": 0},
+        "required_query_facets": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "target_type": {"type": "string", "enum": ["company", "person", "both"]}
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "description": "Synthetic prospect records (8-15 per case).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_file": {"type": "string"},
+          "source_row": {"type": "integer"},
+          "full_name": {"type": ["string", "null"]},
+          "job_title": {"type": ["string", "null"]},
+          "company_name": {"type": ["string", "null"]},
+          "country": {"type": ["string", "null"]},
+          "industry": {"type": ["string", "null"]},
+          "company_size": {"type": ["string", "null"]},
+          "description": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "description": "Expected qualification label per candidate index.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["qualified", "not_qualified", "bordered"]
+      }
+    },
+    "integrity_tests": {
+      "type": "array",
+      "description": "Which integrity dimensions this case tests.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "dropped_criterion",
+          "weak_query_facets",
+          "exclusion_trap",
+          "ambiguous_seniority",
+          "geo_expansion",
+          "alias_resolution"
+        ]
+      }
+    }
+  }
+}

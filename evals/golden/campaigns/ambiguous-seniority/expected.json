@@ -1,0 +1,10 @@
+{
+  "criteria_count_min": 2,
+  "criteria_count_max": 5,
+  "required_kind_count_min": 1,
+  "preference_kind_count_min": 0,
+  "exclusion_kind_count_min": 0,
+  "required_query_facets": ["industry", "geography"],
+  "target_type": "company",
+  "integrity_tests": ["ambiguous_seniority"]
+}

@@ -1,0 +1,92 @@
+[
+  {
+    "source_file": "companies.csv",
+    "source_row": 2,
+    "company_name": "Fast Logistics Pty Ltd",
+    "industry": "Logistics",
+    "company_size": "51-200",
+    "country": "Australia",
+    "description": "Regional logistics",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 3,
+    "company_name": "Small Transport",
+    "industry": "Logistics",
+    "company_size": "1-10",
+    "country": "Australia",
+    "description": "Local transport",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 4,
+    "company_name": "Global Shipping",
+    "industry": "Maritime",
+    "company_size": "201-500",
+    "country": "Australia",
+    "description": "International shipping",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 5,
+    "company_name": "Melbourne Logistics",
+    "industry": "Logistics",
+    "company_size": "11-50",
+    "country": null,
+    "city": "Melbourne",
+    "state": "Victoria",
+    "description": "Warehousing",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 6,
+    "company_name": "NZ Transport",
+    "industry": "Logistics",
+    "company_size": "51-200",
+    "country": "New Zealand",
+    "description": "NZ logistics",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 7,
+    "company_name": "Sydney Transport",
+    "industry": "Logistics",
+    "company_size": "201-500",
+    "country": "Australia",
+    "description": "Sydney freight",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 8,
+    "company_name": "Adelaide Freight",
+    "industry": "Logistics",
+    "company_size": "1-10",
+    "country": "Australia",
+    "description": "Adelaide freight",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 9,
+    "company_name": "Brisbane Haulage",
+    "industry": "Manufacturing",
+    "company_size": "51-200",
+    "country": "Australia",
+    "description": "Brisbane manufacturing",
+    "full_name": null,
+    "job_title": null
+  }
+]

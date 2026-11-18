@@ -1,0 +1,96 @@
+[
+  {
+    "source_file": "companies.csv",
+    "source_row": 2,
+    "company_name": "Fast Freight Pty Ltd",
+    "industry": "Logistics",
+    "company_size": "51-200",
+    "country": "Australia",
+    "description": "Regional logistics and transport",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 3,
+    "company_name": "National Logistics Corp",
+    "industry": "Logistics",
+    "company_size": "501-1000",
+    "country": "Australia",
+    "description": "National logistics network",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 4,
+    "company_name": "Local Courier",
+    "industry": "Logistics",
+    "company_size": "1-10",
+    "country": "Australia",
+    "description": "Same-day courier service",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 5,
+    "company_name": "Pacific Shipping",
+    "industry": "Maritime",
+    "company_size": "51-200",
+    "country": "Australia",
+    "description": "International shipping and freight",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 6,
+    "company_name": "Melbourne Logistics",
+    "industry": "Logistics",
+    "company_size": "11-50",
+    "country": null,
+    "city": "Melbourne",
+    "state": "Victoria",
+    "description": "Warehousing and distribution",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 7,
+    "company_name": "Global Express",
+    "industry": "Logistics",
+    "company_size": "1001-5000",
+    "country": "United States",
+    "description": "Global express delivery",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 7,
+    "company_name": "Adelaide Transport",
+    "industry": "Logistics",
+    "company_size": "51-200",
+    "country": null,
+    "city": "Adelaide",
+    "state": "South Australia",
+    "description": "Transport and logistics",
+    "full_name": null,
+    "job_title": null
+  },
+  {
+    "source_file": "companies.csv",
+    "source_row": 8,
+    "company_name": "Tasmania Freight",
+    "industry": "Logistics",
+    "company_size": "1-10",
+    "country": null,
+    "city": "Hobart",
+    "state": "Tasmania",
+    "description": "Freight services",
+    "full_name": null,
+    "job_title": null
+  }
+]
