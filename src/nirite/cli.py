@@ -6,20 +6,16 @@ from openai import OpenAIError
 import typer
 from rich.console import Console
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from nirite.campaign.llm.providers import build_analysis_providers, build_parser_provider
 from nirite.ingestion.normalizer import normalise_file
 from nirite.ingestion.company_normalizer import normalise_company_file
 from nirite.models.prospect import Prospect
 from nirite.models.company import CompanyProspect
 
-from nirite.campaign.analyser import CampaignAnalyser
-from nirite.campaign.parser import CampaignParser
-from nirite.retrieval.pipeline import run
-from nirite.retrieval.models import RetrievalOutput
+from nirite.campaign.service import build_campaign_definition
+from nirite.eval.runner import EvalFailure
 from nirite.models.campaign import CampaignDefinition
-
+from nirite.retrieval.pipeline import run
 from nirite.ingestion.reassignment import (
     delete_extra_field,
     get_all_fields,
@@ -30,14 +26,16 @@ from nirite.ingestion.reassignment import (
 app = typer.Typer()
 console = Console()
 
+
 def get_filename(path_string):
     path = PurePath(path_string)
-    
+
     # If it didn't split backslashes (e.g., a Windows path parsed on Linux)
-    if '\\' in path.name and not '/' in path_string:
+    if "\\" in path.name and not "/" in path_string:
         path = PureWindowsPath(path_string)
 
     return path
+
 
 def save_prospects(
     prospects: Sequence[Prospect | CompanyProspect], destination: Path
@@ -106,6 +104,7 @@ def ingest(
     table.add_row("Output", str(output_path))
 
     console.print(table)
+
 
 def _display_available_fields(console: Console, available_fields: list) -> None:
     console.print("\n[bold]Available fields[/bold]")
@@ -219,10 +218,7 @@ def _detect_prospect_model_class(
 @app.command()
 def map(
     input_path: Path = typer.Argument(
-        ...,
-        exists=True,
-        readable=True,
-        resolve_path=True
+        ..., exists=True, readable=True, resolve_path=True
     ),
     output_path: Path | None = typer.Option(
         None,
@@ -241,8 +237,7 @@ def map(
 
     try:
         prospects: list[Prospect | CompanyProspect] = [
-            model_class.model_validate(record)
-            for record in records
+            model_class.model_validate(record) for record in records
         ]
     except ValueError as e:
         console.print(f"[red]Error loading input:[/red] {e}")
@@ -271,72 +266,43 @@ def map(
     save_prospects(prospects, destination)
     console.print(f"Saved updated records to {destination}")
 
+
 @app.command()
 def campaign(
-    prompt: str = typer.Argument(
-        ...,
-        help="Natural language campaign description"
-    ),
+    prompt: str = typer.Argument(..., help="Natural language campaign description"),
     output_path: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Path to save the campaign definition JSON file."
+        help="Path to save the campaign definition JSON file.",
     ),
 ):
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            # Pass 1: Campaign Analysis
-            task = progress.add_task(
-                description="Analysing campaign with lightweight models...",
-                total=None
-            )
-
-            analyser = CampaignAnalyser(
-                providers=build_analysis_providers()
-            )
-
-            try:
-                analyses = analyser.analyse(prompt)
-
-                progress.update(
-                    task,
-                    description="[green]Campaign analysis complete!"
+        definition, report = build_campaign_definition(prompt)
+    except EvalFailure as e:
+        console.print("[red]Campaign eval failed — output blocked.[/red]")
+        for finding in e.report.findings:
+            if finding.severity.value == "error":
+                console.print(
+                    f"  [red]ERROR[/red] {finding.code}: {finding.message}"
+                    + (f" (path: {finding.path})" if finding.path else "")
+                    + (f" (evidence: {finding.evidence})" if finding.evidence else "")
                 )
-
-                # Pass 2: Campaign Parsing
-                progress.update(
-                    task,
-                    description="[bold cyan]Generating campaign definition...",
+            elif finding.severity.value == "warn":
+                console.print(
+                    f"  [yellow]WARN[/yellow] {finding.code}: {finding.message}"
                 )
-
-                parser = CampaignParser(
-                    providers=build_parser_provider()
-                )
-
-                result = parser.parse(prompt, analyses)
-                progress.update(
-                    task, 
-                    description="[green]Campaign parsing complete!"
-                )
-            except RuntimeError as e:
-                console.print(f"[red]{e}[/red]")
-                raise typer.Exit(code=1)
+        raise typer.Exit(code=1)
     except (RuntimeError, ValueError, OpenAIError) as e:
         console.print(f"[red]Campaign processing failed:[/red] {e}")
         raise typer.Exit(code=1) from e
 
-     # Campaign summary
+    # Campaign summary
     console.print("\n[bold cyan]Campaign Summary[/bold cyan]")
-    console.print(f"Status: {result.status.value}")
-    console.print(f"Target: {result.spec.target_type.value}")
-    console.print(f"Objective: {result.spec.objective}")
-    console.print(f"Description: {result.spec.target_description}")
+    console.print(f"Status: {definition.status.value}")
+    console.print(f"Target: {definition.spec.target_type.value}")
+    console.print(f"Objective: {definition.spec.objective}")
+    console.print(f"Description: {definition.spec.target_description}")
 
     # Criteria
     criteria_table = Table(title="Campaign Criteria")
@@ -346,11 +312,9 @@ def campaign(
     criteria_table.add_column("Description")
     criteria_table.add_column("Predicate")
 
-    for criterion in result.spec.criteria:
+    for criterion in definition.spec.criteria:
         predicate = (
-            criterion.predicate.model_dump_json()
-            if criterion.predicate
-            else "-"
+            criterion.predicate.model_dump_json() if criterion.predicate else "-"
         )
 
         criteria_table.add_row(
@@ -370,7 +334,7 @@ def campaign(
     query_table.add_column("Query")
     query_table.add_column("Rationale")
 
-    for query in result.query_plan.queries:
+    for query in definition.query_plan.queries:
         query_table.add_row(
             query.id,
             query.facet.value,
@@ -381,31 +345,32 @@ def campaign(
     console.print(query_table)
 
     # Clarifications
-    if result.clarifications:
+    if definition.clarifications:
         console.print("\n[bold yellow]Clarification Questions[/bold yellow]")
 
-        for index, clarification in enumerate(
-            result.clarifications, start=1
-        ):
-            console.print(
-                f"{index}. {clarification.question}"
-            )
-            console.print(
-                f"   Reason: {clarification.reason}"
-            )
+        for index, clarification in enumerate(definition.clarifications, start=1):
+            console.print(f"{index}. {clarification.question}")
+            console.print(f"   Reason: {clarification.reason}")
+
+    # Eval findings
+    if report.warn_count > 0:
+        console.print("\n[bold yellow]Eval Warnings[/bold yellow]")
+        for finding in report.findings:
+            if finding.severity.value == "warn":
+                console.print(
+                    f"  [yellow]WARN[/yellow] {finding.code}: {finding.message}"
+                )
 
     # Optional JSON persistence
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         output_path.write_text(
-            result.model_dump_json(indent=2),
+            definition.model_dump_json(indent=2),
             encoding="utf-8",
         )
 
-        console.print(
-            f"\n[green]Saved campaign to {output_path}[/green]"
-        )
+        console.print(f"\n[green]Saved campaign to {output_path}[/green]")
 
 
 @app.command()
@@ -530,7 +495,7 @@ def retrieve(
                         data.get("full_name", "-"),
                         data.get("company_name", "-"),
                         data.get("job_title", "-"),
-                        f'{data.get("city", "-")}, {data.get("country", "-")}',
+                        f"{data.get('city', '-')}, {data.get('country', '-')}",
                     ]
                 )
             results_table.add_row(
