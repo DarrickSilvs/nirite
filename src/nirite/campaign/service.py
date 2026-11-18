@@ -13,7 +13,7 @@ from nirite.campaign.llm.providers import (
     build_parser_provider,
 )
 from nirite.campaign.parser import CampaignParser
-from nirite.eval.models import EvalMode, EvalReport, EvalSeverity
+from nirite.eval.models import EvalFinding, EvalMode, EvalReport, EvalSeverity
 from nirite.eval.runner import EvalFailure, run_definition_evals
 from nirite.models.campaign import CampaignDefinition
 
